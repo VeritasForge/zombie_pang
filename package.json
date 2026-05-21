@@ -1,0 +1,47 @@
+{
+  "name": "zombie-pang",
+  "version": "0.1.0",
+  "description": "Off-Clock Pang — 50층 좀비 사옥 야근 끝내고 퇴근하는 B급 코믹 호러 PWA",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "test:prop": "vitest run --reporter=verbose **/*.prop.test.ts",
+    "test:mutation": "stryker run",
+    "test:e2e": "playwright test",
+    "lighthouse": "npx -y @lhci/cli autorun || true",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "biome check src tests",
+    "format": "biome format --write src tests",
+    "size": "du -sh dist/ 2>/dev/null || echo 'run build first'"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@fast-check/vitest": "^0.1.3",
+    "@playwright/test": "^1.48.0",
+    "@stryker-mutator/core": "^8.6.0",
+    "@stryker-mutator/vitest-runner": "^8.6.0",
+    "@types/node": "^22.7.5",
+    "@vitest/coverage-v8": "^2.1.4",
+    "fast-check": "^3.23.1",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vite-plugin-pwa": "^0.20.5",
+    "vitest": "^2.1.4",
+    "vitest-canvas-mock": "^0.3.3"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.12.0"
+}
