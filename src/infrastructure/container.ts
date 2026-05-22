@@ -2,7 +2,8 @@
 // 도메인은 import하지 않는다 (Hexagonal DIP). use case 함수만 wire-up.
 
 import { LocalStorageSaveStore } from "@adapters/persistence/local-storage-save-store";
-import { SCENE_KEYS, VIEWPORT } from "@adapters/phaser/config";
+import { PhaserGameClock } from "@adapters/phaser/clocks/phaser-game-clock";
+import { PHASER_FPS, SCENE_KEYS, VIEWPORT } from "@adapters/phaser/config";
 import { AudioManager } from "@adapters/phaser/managers/audio-manager";
 import { BootScene } from "@adapters/phaser/scenes/boot-scene";
 import { GameOverScene } from "@adapters/phaser/scenes/game-over-scene";
@@ -107,6 +108,7 @@ export function startGame(parent: HTMLElement): Phaser.Game {
       width: VIEWPORT.width,
       height: VIEWPORT.height,
     },
+    fps: { ...PHASER_FPS },
     render: {
       antialias: true,
       antialiasGL: true,
@@ -125,10 +127,15 @@ export function startGame(parent: HTMLElement): Phaser.Game {
   };
 
   const game = new Phaser.Game(config);
+  // Phaser.Game 인스턴스가 생긴 이후, 도메인이 게임 루프와 동기화된 시간을 보도록
+  // ports.clock을 PhaserGameClock으로 교체. SystemClock은 부팅 직전/jsdom 테스트 fallback.
+  const phaserClock = new PhaserGameClock(game);
+  const portsWithGameClock = { ...container.ports, clock: phaserClock };
+  const containerWithGameClock: Container = { ...container, ports: portsWithGameClock };
   // Container를 game.registry에 저장 — 모든 scene에서 접근 가능.
-  game.registry.set(SCENE_DATA_KEY, container);
+  game.registry.set(SCENE_DATA_KEY, containerWithGameClock);
   // Boot scene에 명시적으로 data 주입 (scene.start 직전 트리거).
-  game.scene.start(SCENE_KEYS.boot, { container });
+  game.scene.start(SCENE_KEYS.boot, { container: containerWithGameClock });
 
   if (typeof import.meta !== "undefined" && import.meta.hot) {
     import.meta.hot.dispose(() => {

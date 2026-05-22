@@ -61,6 +61,23 @@ export const FPS = {
   belowFramesToDegrade: 3,
 } as const;
 
+// Phaser TimeStep 설정 — Phaser.Game config의 fps 객체로 그대로 전달된다.
+//   target          : 목표 FPS. 60Hz 기준.
+//   forceSetTimeOut : false면 RAF 우선. iOS Safari 백그라운드 복귀 안정성을 위해 RAF 유지.
+//   smoothStep      : 최근 deltaHistory 프레임의 이동평균으로 delta jitter를 흡수. 모바일에서 권장.
+//   deltaHistory    : smoothing 윈도우 크기 (프레임 수).
+//   panicMax        : 탭 백그라운드 복귀 후 cool-down 프레임 수. 큰 delta를 _target으로 clamp.
+//
+// 결정론 도메인 로직(combo decay 등)은 본 smoothed delta를 사용하지 않고
+// PhaserGameClock.now() = game.loop.now (non-smoothed monotonic)를 참조한다.
+export const PHASER_FPS = {
+  target: 60,
+  forceSetTimeOut: false,
+  smoothStep: true,
+  deltaHistory: 10,
+  panicMax: 120,
+} as const;
+
 export const FONT_FAMILY =
   '"Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
 

@@ -24,7 +24,7 @@ function makeSaveStore(initial: Record<string, unknown> = {}): ISaveStore & {
 }
 
 function makeClock(nowMs: number): IClock {
-  return { now: () => nowMs };
+  return { now: () => nowMs, monotonic: () => nowMs };
 }
 
 function makeRandom(): IRandom {
@@ -137,7 +137,7 @@ describe("startRun", () => {
   });
 
   it("[Error] clock.now()가 NaN이면 RangeError", () => {
-    const badClock: IClock = { now: () => Number.NaN };
+    const badClock: IClock = { now: () => Number.NaN, monotonic: () => Number.NaN };
     expect(() => startRun({ saveStore, clock: badClock, random }, { runId: "x" })).toThrow(
       RangeError,
     );

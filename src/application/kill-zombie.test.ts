@@ -8,7 +8,7 @@ import { ZOMBIE_TYPE, specOf } from "@domain/wave/zombie-type";
 import { describe, expect, it, vi } from "vitest";
 import { _coinTierOf, killZombie } from "./kill-zombie";
 
-const clock: IClock = { now: () => 0 };
+const clock: IClock = { now: () => 0, monotonic: () => 0 };
 
 function makeRandom(values: readonly number[], pickIndex = 0): IRandom {
   let cursor = 0;

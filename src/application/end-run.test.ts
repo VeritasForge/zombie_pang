@@ -25,7 +25,7 @@ function makeSaveStore(initial: Record<string, unknown> = {}): ISaveStore & {
 }
 
 const FAKE_NOW = 10_000;
-const clock: IClock = { now: () => FAKE_NOW };
+const clock: IClock = { now: () => FAKE_NOW, monotonic: () => FAKE_NOW };
 
 describe("endRun", () => {
   let saveStore: ReturnType<typeof makeSaveStore>;
@@ -289,7 +289,7 @@ describe("endRun", () => {
   });
 
   it("[Error] clock.now()가 NaN이면 RangeError", () => {
-    const badClock: IClock = { now: () => Number.NaN };
+    const badClock: IClock = { now: () => Number.NaN, monotonic: () => Number.NaN };
     expect(() =>
       endRun(
         { saveStore, clock: badClock },
