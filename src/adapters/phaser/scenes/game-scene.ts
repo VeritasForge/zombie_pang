@@ -63,6 +63,17 @@ function paceForChapter(chapter: number): {
   };
 }
 
+/**
+ * Playwright E2E 시나리오에서 boss wave 진입 + HP/도주 강제 트리거에 사용.
+ * window.__zp_test__로 노출.
+ */
+type ZpTestHooks = {
+  readonly startBossWave: (chapter: number) => void;
+  readonly setBossHp: (hp: number) => void;
+  readonly forceMinionTimeout: () => void;
+  readonly autoTapBoss: () => void;
+};
+
 type ActiveZombie = {
   readonly id: string;
   readonly obj: Zombie;
@@ -188,6 +199,57 @@ export class GameScene extends Phaser.Scene {
 
     // e2e 검증용 — window에 현재 활성 scene 표시 (Playwright polling 진입점).
     this.publishE2eState();
+    this.exposeTestHooks();
+  }
+
+  /**
+   * E2E (Playwright) 전용 boss wave 빠른 도달 hook.
+   * window.__zp_test__ 네임스페이스로 노출. 단방향 mutation으로 cheating 외 위험 없음
+   * (publishE2eState와 동일한 트레이드오프). production grade: chapter/wave skip은 보스
+   * 거동 회귀 가드 외 사용 시 점수 ledger 불일치 가능 → e2e 시나리오 한정.
+   *
+   * 매 GameScene create마다 같은 hook으로 재바인딩(this 캡쳐) — 활성 scene이 항상 fresh.
+   */
+  private exposeTestHooks(): void {
+    if (typeof window === "undefined") return;
+    // biome-ignore lint/style/useNamingConvention: e2e test hook 네임스페이스.
+    (window as unknown as { __zp_test__: ZpTestHooks }).__zp_test__ = {
+      startBossWave: (chapter: number): void => {
+        const safeChapter = Math.max(1, Math.min(5, Math.floor(chapter)));
+        this.chapter = safeChapter;
+        this.wave = 10;
+        this.spawnedInWave = 0;
+        this.killedInWave = 0;
+        this.resolvedInWave = 0;
+        // 잔여 일반 좀비 cleanup — boss spawn 직후 5개(CEO+미니언) 단언을 위해.
+        for (const z of [...this.zombies]) {
+          z.obj.destroy();
+        }
+        this.zombies = [];
+        this.scheduleNextSpawn();
+      },
+      setBossHp: (hp: number): void => {
+        if (this.bossZombie) {
+          this.bossZombie.hp = Math.max(0, Math.min(this.bossZombie.maxHp, hp));
+        }
+      },
+      forceMinionTimeout: (): void => {
+        const past = this.time.now - 1_000_000;
+        for (const z of this.zombies) {
+          if (this.bossMinionIds.has(z.id)) {
+            (z as { spawnedAt: number }).spawnedAt = past;
+          }
+        }
+      },
+      autoTapBoss: (): void => {
+        if (this.bossZombie) {
+          this.bossZombie.hp = 0;
+          // killZombie use case를 건너뛰고 직접 boss kill flow 트리거 (envelope time만 측정).
+          this.removeZombie(this.bossZombie.zombieId);
+          this.onBossKilled();
+        }
+      },
+    };
   }
 
   private scheduleNextSpawn(): void {
@@ -518,6 +580,13 @@ export class GameScene extends Phaser.Scene {
    */
   private publishE2eState(): void {
     if (typeof window === "undefined") return;
+    const chapterBranded = asChapterNumber(this.chapter);
+    const bossMaxHp = this.bossZombie ? bossHpForChapter(this.chapter) : null;
+    const bossHp = this.bossZombie?.hp ?? null;
+    const bossRageLevel =
+      this.bossZombie && bossMaxHp !== null
+        ? computeRageLevel(this.bossZombie.hp, bossMaxHp, chapterBranded)
+        : null;
     const snapshot = {
       chapter: this.chapter,
       wave: this.wave,
@@ -531,6 +600,12 @@ export class GameScene extends Phaser.Scene {
         x: z.obj.x,
         y: z.obj.y,
       })),
+      // 보스 거동 E2E (E1~E5) 검증용 필드 — boss wave 활성 여부 + 미니언 id 집합 + HP/격노.
+      bossWaveActive: this.bossWaveActive,
+      bossMinionIds: Array.from(this.bossMinionIds),
+      bossHp,
+      bossMaxHp,
+      bossRageLevel,
       sceneActive: this.scene.isActive(),
       activeScene: SCENE_KEYS.game,
     };
