@@ -30,6 +30,7 @@ export function composeMinions(chapter: ChapterNumber): readonly MinionSpec[] {
         { type: ZOMBIE_TYPE.MIDDLE, count: 3 },
         { type: ZOMBIE_TYPE.LEAD, count: 1 },
       ];
+    /* v8 ignore next 2 — ChapterNumber branded type이 1~5만 허용, default 도달 불가 */
     default:
       throw new RangeError(`Invalid chapter for composeMinions: ${String(chapter)}`);
   }
