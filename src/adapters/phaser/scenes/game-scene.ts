@@ -295,7 +295,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // 3) HUD + 플래그
-    this.bossHud = new BossHud(this, VIEWPORT.width / 2, px(40), hp);
+    this.bossHud = new BossHud(this, VIEWPORT.width / 2, px(40), hp, chapterBranded);
     this.bossHud.setDepth(900);
     this.bossWaveActive = true;
     this.bossStartTimeMs = container.ports.clock.now();
