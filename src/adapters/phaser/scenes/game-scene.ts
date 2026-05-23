@@ -229,6 +229,18 @@ export class GameScene extends Phaser.Scene {
         this.spawnedInWave = 0;
         this.killedInWave = 0;
         this.resolvedInWave = 0;
+        // P2-A: 같은 scene 인스턴스에서 재호출 가능 (E2E retry 등) — boss state 6개 명시 리셋.
+        // 미리셋 시 spawnBoss의 `if (!this.bossZombie)` 가드에 막혀 두 번째 호출이 noop이 되고
+        // bossPhaseConfig stale로 Ch1 phase로 Ch5 보스 렌더되는 문제 방지.
+        if (this.bossHud) {
+          this.bossHud.destroy();
+          this.bossHud = null;
+        }
+        this.bossZombie = null;
+        this.bossWaveActive = false;
+        this.bossStartTimeMs = 0;
+        this.bossMinionIds.clear();
+        this.bossPhaseConfig = null;
         // 잔여 일반 좀비 cleanup — boss spawn 직후 5개(CEO+미니언) 단언을 위해.
         for (const z of [...this.zombies]) {
           z.obj.destroy();
@@ -237,6 +249,10 @@ export class GameScene extends Phaser.Scene {
         this.scheduleNextSpawn();
       },
       setBossHp: (hp: number): void => {
+        // P2-B: NaN 가드 — setBossHp(NaN) 시 Math.min(maxHp, NaN)=NaN → bossZombie.hp=NaN →
+        // 다음 frame bossHud.setHp(NaN) → computeRageLevel(NaN, ...) F3 가드 RangeError throw로
+        // update tick uncaught exception 발생, scene freeze. 비유한값은 silent no-op.
+        if (!Number.isFinite(hp)) return;
         if (this.bossZombie) {
           this.bossZombie.hp = Math.max(0, Math.min(this.bossZombie.maxHp, hp));
         }
