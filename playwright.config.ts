@@ -24,7 +24,9 @@ export default defineConfig({
   ],
   timeout: 90 * 1000,
   webServer: {
-    command: "pnpm build && pnpm preview --port 5173 --strictPort",
+    // VITE_ZP_E2E=1 — build 시점에 production bundle로 inline되어 __zp_test__ 훅 노출 게이트를
+    // 통과시킨다. e2e 외 일반 preview/배포에서는 unset → 훅 미노출 (cheat 차단).
+    command: "VITE_ZP_E2E=1 pnpm build && pnpm preview --port 5173 --strictPort",
     url: "http://localhost:5173",
     reuseExistingServer: !process.env["CI"],
     timeout: 180 * 1000,

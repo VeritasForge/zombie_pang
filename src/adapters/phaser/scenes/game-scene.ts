@@ -212,6 +212,10 @@ export class GameScene extends Phaser.Scene {
    */
   private exposeTestHooks(): void {
     if (typeof window === "undefined") return;
+    // production cheat 차단 — dev 빌드 또는 VITE_ZP_E2E=1 환경(Playwright)에서만 노출.
+    // playwright.config.ts webServer.command가 `VITE_ZP_E2E=1 pnpm build`로 inline 주입.
+    // 일반 사용자의 production build에서는 __zp_test__ 미정의 → chapter skip cheating 차단.
+    if (!import.meta.env.DEV && import.meta.env.VITE_ZP_E2E !== "1") return;
     // biome-ignore lint/style/useNamingConvention: e2e test hook 네임스페이스.
     (window as unknown as { __zp_test__: ZpTestHooks }).__zp_test__ = {
       startBossWave: (chapter: number): void => {
@@ -420,7 +424,21 @@ export class GameScene extends Phaser.Scene {
     // 좀비 제거
     this.removeZombie(obj.zombieId);
     this.killedInWave += 1;
-    this.resolvedInWave += 1;
+
+    // F5: 보스 미니언이면 Set에서도 삭제 — onBossKilled의 잔여 미니언 폭사 루프 stale id 누수
+    // + publishE2eState snapshot stale id 노출 방지.
+    if (this.bossMinionIds.has(obj.zombieId)) {
+      this.bossMinionIds.delete(obj.zombieId);
+    }
+
+    // F4: 보스 wave 중 미니언 처치는 resolvedInWave에서 제외.
+    // 보스 wave는 currentZombiesPerWave()=6 (Ch4/Ch5). 미니언 6마리 처치 시 advanceWave가
+    // 잘못 발화되어 보스 처치 전 wave 11로 진행 → 게임 깨짐. D5 γ 격리(도주 분기)와 대칭.
+    // 보스 wave 종료는 onBossKilled 단독 경로로 처리.
+    const isBossWaveMinion = this.bossWaveActive && obj.zombieType !== ZOMBIE_TYPE.CEO;
+    if (!isBossWaveMinion) {
+      this.resolvedInWave += 1;
+    }
 
     if (obj.zombieType === ZOMBIE_TYPE.CEO) {
       this.onBossKilled();
@@ -430,7 +448,8 @@ export class GameScene extends Phaser.Scene {
     this.publishHud();
 
     // wave 종료 판정 — killed + fled가 wave 한도를 채우면 진행.
-    if (this.resolvedInWave >= this.currentZombiesPerWave()) {
+    // 보스 wave 중에는 위 가드로 resolvedInWave가 증가하지 않아 이 분기가 발화되지 않음.
+    if (!this.bossWaveActive && this.resolvedInWave >= this.currentZombiesPerWave()) {
       this.advanceWave();
     }
   }
@@ -447,12 +466,18 @@ export class GameScene extends Phaser.Scene {
   private onBossKilled(): void {
     this.isPaused = true;
 
-    // D6: 잔여 미니언 한 frame 내 일괄 폭사 — 점수 정상 인정, drop은 후속 spec 범위
+    // F7: 잔여 미니언 폭사 시 coin 지급 누락 회귀 fix.
+    // killZombie use case와 동일한 공식: floor(spec.reward × (1 + meta.coinGain())).
+    // 음수 coinGain은 정의상 발생하지 않으나 use case와 대칭하여 0 floor 방어.
+    const coinMultiplier = 1 + Math.max(0, this.meta.coinGain());
+
+    // D6: 잔여 미니언 한 frame 내 일괄 폭사 — 점수 + coin 정상 인정, drop은 후속 spec 범위
     for (const minionId of Array.from(this.bossMinionIds)) {
       const entry = this.zombies.find((z) => z.id === minionId);
       if (entry) {
         const spec = specOf(entry.type);
         this.score = this.score.add(spec.reward);
+        this.earnedCoinAccum += Math.floor(spec.reward * coinMultiplier);
         this.removeZombie(minionId);
       }
     }
