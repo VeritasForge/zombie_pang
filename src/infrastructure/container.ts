@@ -25,6 +25,9 @@ import Phaser from "phaser";
 import { WebAudioSynth } from "./audio/web-audio-synth";
 import { SystemClock } from "./clock/system-clock";
 import { VibrationApi } from "./haptic/vibration-api";
+import { InstallPromptManager } from "./pwa/install-prompt";
+import { MidnightCueManager } from "./pwa/midnight-cue";
+import { registerServiceWorker } from "./pwa/register-sw";
 import { SeededRandom } from "./random/seeded-random";
 
 export type UseCases = {
@@ -43,10 +46,16 @@ export type Ports = {
   readonly haptic: IHaptic;
 };
 
+export type PwaServices = {
+  readonly installPrompt: InstallPromptManager;
+  readonly midnightCue: MidnightCueManager;
+};
+
 export type Container = {
   readonly ports: Ports;
   readonly useCases: UseCases;
   readonly audioManager: AudioManager;
+  readonly pwa: PwaServices;
 };
 
 const SCENE_DATA_KEY = "container";
@@ -82,6 +91,8 @@ export function buildContainer(): Container {
   const audio = new WebAudioSynth();
   const haptic = new VibrationApi();
   const audioManager = new AudioManager(audio);
+  const installPrompt = new InstallPromptManager(saveStore);
+  const midnightCue = new MidnightCueManager();
 
   return {
     ports: { saveStore, clock, random, audio, haptic },
@@ -93,6 +104,7 @@ export function buildContainer(): Container {
       endRun,
     },
     audioManager,
+    pwa: { installPrompt, midnightCue },
   };
 }
 
@@ -127,6 +139,12 @@ export function startGame(parent: HTMLElement): Phaser.Game {
   };
 
   const game = new Phaser.Game(config);
+  // PWA Service Worker 등록 — fire-and-forget. dev 모드 / SW 미지원은 내부에서 graceful skip.
+  void registerServiceWorker({
+    onNeedRefresh: () => console.info("[좀비팡] 업데이트 발견 — 새로고침 시 적용됩니다."),
+    onOfflineReady: () => console.info("[좀비팡] 오프라인 준비 완료."),
+    onRegisterError: (err) => console.warn("[좀비팡] SW 등록 실패", err),
+  });
   // Phaser.Game 인스턴스가 생긴 이후, 도메인이 게임 루프와 동기화된 시간을 보도록
   // ports.clock을 PhaserGameClock으로 교체. SystemClock은 부팅 직전/jsdom 테스트 fallback.
   const phaserClock = new PhaserGameClock(game);
