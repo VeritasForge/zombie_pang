@@ -8,8 +8,13 @@ export type RageLevel = 0 | 1 | 2;
 export type { PhaseConfig };
 
 export function computeRageLevel(hp: number, maxHp: number, chapter: ChapterNumber): RageLevel {
-  if (maxHp <= 0) {
-    throw new RangeError(`maxHp must be positive (got ${maxHp})`);
+  // F3 (NaN guard): `maxHp <= 0` 단독은 NaN을 silent 통과 (NaN <= 0 = false) → ratio = NaN
+  // → 모든 비교 false → rage 0 잘못 반환. Number.isFinite로 NaN/±Infinity 모두 차단.
+  if (!Number.isFinite(maxHp) || maxHp <= 0) {
+    throw new RangeError(`maxHp must be a positive finite number (got ${maxHp})`);
+  }
+  if (!Number.isFinite(hp)) {
+    throw new RangeError(`hp must be a finite number (got ${hp})`);
   }
   const ch = chapter as number;
   if (ch <= 3) return 0;

@@ -84,4 +84,29 @@ describe("tickBossPosition", () => {
     });
     expect(result).toEqual(CENTER);
   });
+
+  // [Error] clock 구현체 오류로 NaN 반환 — F3 NaN guard로 center degrade (render crash 차단)
+  it("[Error] clock.now()=NaN → center 반환 (NaN 전파 차단)", () => {
+    const clock = new FakeClock(Number.NaN);
+    const result = tickBossPosition({
+      clock,
+      bossStartTimeMs: 0,
+      center: CENTER,
+      R,
+      omega: OMEGA,
+    });
+    expect(result).toEqual(CENTER);
+  });
+  // [Error] bossStartTimeMs=NaN 도 동일 graceful degrade
+  it("[Error] bossStartTimeMs=NaN → center 반환 (NaN 전파 차단)", () => {
+    const clock = new FakeClock(1000);
+    const result = tickBossPosition({
+      clock,
+      bossStartTimeMs: Number.NaN,
+      center: CENTER,
+      R,
+      omega: OMEGA,
+    });
+    expect(result).toEqual(CENTER);
+  });
 });

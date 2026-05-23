@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampDeltaMs, computeBossPosition } from "./boss-movement";
+import { computeBossPosition } from "./boss-movement";
 
 const CENTER = { x: 200, y: 400 };
 const R = 100;
@@ -29,22 +29,14 @@ describe("computeBossPosition", () => {
   it("[Error] tMs=-1 → throw RangeError", () => {
     expect(() => computeBossPosition(-1, CENTER, R, OMEGA)).toThrow(RangeError);
   });
-});
-
-describe("clampDeltaMs", () => {
-  it("[Happy] clampDeltaMs(16) → 16", () => {
-    expect(clampDeltaMs(16)).toBe(16);
+  // [Error] tMs=NaN — F3 NaN guard (silent {NaN,NaN} 전파 차단)
+  it("[Error] tMs=NaN → throw RangeError", () => {
+    expect(() => computeBossPosition(Number.NaN, CENTER, R, OMEGA)).toThrow(RangeError);
   });
-  it("[Boundary] clampDeltaMs(0) → 0", () => {
-    expect(clampDeltaMs(0)).toBe(0);
-  });
-  it("[Boundary] clampDeltaMs(100) → 100", () => {
-    expect(clampDeltaMs(100)).toBe(100);
-  });
-  it("[Boundary] clampDeltaMs(150) → 100", () => {
-    expect(clampDeltaMs(150)).toBe(100);
-  });
-  it("[Boundary] clampDeltaMs(-1) → 0", () => {
-    expect(clampDeltaMs(-1)).toBe(0);
+  // [Error] tMs=Infinity
+  it("[Error] tMs=Infinity → throw RangeError", () => {
+    expect(() => computeBossPosition(Number.POSITIVE_INFINITY, CENTER, R, OMEGA)).toThrow(
+      RangeError,
+    );
   });
 });

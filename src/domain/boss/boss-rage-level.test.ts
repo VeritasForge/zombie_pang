@@ -59,6 +59,18 @@ describe("computeRageLevel", () => {
   it("[Error] maxHp=-1 → throw RangeError", () => {
     expect(() => computeRageLevel(10, -1, asChapterNumber(5))).toThrow(RangeError);
   });
+  // [Error] NaN guards (F3) — `<=0` 단독으로는 NaN을 silent 통과 → ratio=NaN → rage 0 잘못 반환
+  it("[Error] maxHp=NaN → throw RangeError", () => {
+    expect(() => computeRageLevel(10, Number.NaN, asChapterNumber(5))).toThrow(RangeError);
+  });
+  it("[Error] hp=NaN → throw RangeError", () => {
+    expect(() => computeRageLevel(Number.NaN, 100, asChapterNumber(5))).toThrow(RangeError);
+  });
+  it("[Error] maxHp=Infinity → throw RangeError", () => {
+    expect(() => computeRageLevel(10, Number.POSITIVE_INFINITY, asChapterNumber(5))).toThrow(
+      RangeError,
+    );
+  });
 });
 
 describe("applyRageMultipliers", () => {

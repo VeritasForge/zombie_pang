@@ -1,6 +1,6 @@
 import { fc, test } from "@fast-check/vitest";
 import { describe, expect } from "vitest";
-import { clampDeltaMs, computeBossPosition } from "./boss-movement";
+import { computeBossPosition } from "./boss-movement";
 
 const CENTER = { x: 200, y: 400 };
 
@@ -47,14 +47,4 @@ describe("boss-movement properties (seed=42, numRuns=1000)", () => {
     expect(a.x).toBe(b.x);
     expect(a.y).toBe(b.y);
   });
-
-  // clampDeltaMs property
-  test.prop([fc.double({ noNaN: true })], { seed: 42, numRuns: 1000 })(
-    "clampDeltaMs: 0 ≤ result ≤ 100",
-    (dt) => {
-      const r = clampDeltaMs(dt);
-      expect(r).toBeGreaterThanOrEqual(0);
-      expect(r).toBeLessThanOrEqual(100);
-    },
-  );
 });

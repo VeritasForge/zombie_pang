@@ -3,7 +3,7 @@
 
 import { spawnBossWave } from "@application/spawn-boss-wave";
 import { tickBossPosition } from "@application/tick-boss-position";
-import { getPhaseConfig } from "@domain/boss/boss-phase-config";
+import type { PhaseConfig } from "@domain/boss/boss-phase-config";
 import { applyRageMultipliers, computeRageLevel } from "@domain/boss/boss-rage-level";
 import type { DailyStreak } from "@domain/meta/daily-streak";
 import { MetaProgression } from "@domain/meta/progression";
@@ -112,6 +112,9 @@ export class GameScene extends Phaser.Scene {
   private bossWaveActive = false;
   private bossStartTimeMs = 0;
   private bossMinionIds: Set<string> = new Set();
+  // F11: spawnBossWave use case가 반환하는 phase config를 spawn 시점에 cache.
+  // 매 frame getPhaseConfig 재호출 회피 + use case 출력의 절반(payload.phase) silent 폐기 차단.
+  private bossPhaseConfig: PhaseConfig | null = null;
   private juice!: JuiceManager;
   private spawner = new Spawner();
   private meta: MetaProgression = MetaProgression.empty();
@@ -142,6 +145,7 @@ export class GameScene extends Phaser.Scene {
     this.bossWaveActive = false;
     this.bossStartTimeMs = 0;
     this.bossMinionIds = new Set();
+    this.bossPhaseConfig = null;
     this.isPaused = false;
     this.meta = data.carryMeta ?? MetaProgression.empty();
     this.streak = data.carryStreak ?? null;
@@ -365,7 +369,9 @@ export class GameScene extends Phaser.Scene {
     this.bossHud.setDepth(900);
     this.bossWaveActive = true;
     this.bossStartTimeMs = container.ports.clock.now();
-    void payload.phase; // phase config는 update() tick에서 fresh 조회 (격노 단계 반영)
+    // F11: use case가 반환한 phase config를 cache (chapter 불변 동안 매 frame 재계산 불필요).
+    // applyRageMultipliers는 update tick에서 격노 단계 반영하여 별도 곱셈 적용.
+    this.bossPhaseConfig = payload.phase;
   }
 
   private onZombieDown(_pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject): void {
@@ -472,6 +478,10 @@ export class GameScene extends Phaser.Scene {
     const coinMultiplier = 1 + Math.max(0, this.meta.coinGain());
 
     // D6: 잔여 미니언 한 frame 내 일괄 폭사 — 점수 + coin 정상 인정, drop은 후속 spec 범위
+    // F6 (D5 race 방어 주석): JS는 단일 thread이므로 update() toRemove 루프(라인 ~550)와
+    // onBossKilled가 같은 frame에 둘 다 발화될 일은 없다. 그러나 같은 frame에 도주로
+    // bossMinionIds.delete된 미니언은 zombies.find가 undefined → skip — 일관된 결과.
+    // (도주 미니언은 D5 γ 격리로 점수/coin 미지급이 정상.)
     for (const minionId of Array.from(this.bossMinionIds)) {
       const entry = this.zombies.find((z) => z.id === minionId);
       if (entry) {
@@ -483,6 +493,8 @@ export class GameScene extends Phaser.Scene {
     }
     this.bossMinionIds.clear();
     this.bossWaveActive = false;
+    // F11: phase config cache 정리 — 다음 보스 wave에서 fresh use case 호출 보장.
+    this.bossPhaseConfig = null;
 
     if (this.bossHud) {
       this.bossHud.destroy();
@@ -572,13 +584,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     // boss 위치 갱신 (Lissajous 8자 + 격노 단계 가속)
-    if (this.bossWaveActive && this.bossZombie) {
+    // F11: bossPhaseConfig는 spawn 시점에 use case 결과를 cache했음 — 매 frame getPhaseConfig 재호출 회피.
+    if (this.bossWaveActive && this.bossZombie && this.bossPhaseConfig) {
       const container = getContainer(this);
       const chapterBranded = asChapterNumber(this.chapter);
-      const basePhase = getPhaseConfig(chapterBranded);
       const maxHp = bossHpForChapter(this.chapter);
       const rage = computeRageLevel(this.bossZombie.hp, maxHp, chapterBranded);
-      const effective = applyRageMultipliers(basePhase, rage);
+      const effective = applyRageMultipliers(this.bossPhaseConfig, rage);
       const pos = tickBossPosition({
         clock: container.ports.clock,
         bossStartTimeMs: this.bossStartTimeMs,

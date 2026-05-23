@@ -20,6 +20,12 @@ export function tickBossPosition(input: TickBossPositionInput): BossPosition {
   const { clock, bossStartTimeMs, center, R, omega } = input;
   // 누적 elapsed time (clamp 안 함 — sin은 큰 tMs에서도 ±R 안에 안전)
   // 시계 역행 (now < start) 만 0으로 가드.
-  const elapsed = Math.max(0, clock.now() - bossStartTimeMs);
+  // F3 (NaN guard): clock 구현체 오류로 NaN 반환 시 Math.max(0, NaN) = NaN 전파 →
+  // computeBossPosition throw → render crash. NaN 감지 시 center로 graceful degrade.
+  const rawElapsed = clock.now() - bossStartTimeMs;
+  if (!Number.isFinite(rawElapsed)) {
+    return center;
+  }
+  const elapsed = Math.max(0, rawElapsed);
   return computeBossPosition(elapsed, center, R, omega);
 }
