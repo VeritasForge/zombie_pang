@@ -1,6 +1,10 @@
 // GameScene — 게임 메인 루프.
 // 좀비 spawn, tap 입력, use case 호출, juice 트리거. 도메인 직접 import 없음.
 
+import { spawnBossWave } from "@application/spawn-boss-wave";
+import { tickBossPosition } from "@application/tick-boss-position";
+import { getPhaseConfig } from "@domain/boss/boss-phase-config";
+import { applyRageMultipliers, computeRageLevel } from "@domain/boss/boss-rage-level";
 import type { DailyStreak } from "@domain/meta/daily-streak";
 import { MetaProgression } from "@domain/meta/progression";
 import { bossHpForChapter } from "@domain/powerup/boss";
@@ -12,6 +16,7 @@ import { Spawner } from "@domain/wave/spawner";
 import { Wave } from "@domain/wave/wave";
 import { ZOMBIE_TYPE, type ZombieType, specOf } from "@domain/wave/zombie-type";
 import { getContainer } from "@infrastructure/container";
+import { asChapterNumber } from "@shared/types/branded";
 import Phaser from "phaser";
 import { COLOR_HEX, SCENE_KEYS, VIEWPORT, px } from "../config";
 import { JuiceManager } from "../managers/juice-manager";
@@ -93,6 +98,9 @@ export class GameScene extends Phaser.Scene {
   private nextZombieId = 0;
   private bossZombie: Zombie | null = null;
   private bossHud: BossHud | null = null;
+  private bossWaveActive = false;
+  private bossStartTimeMs = 0;
+  private bossMinionIds: Set<string> = new Set();
   private juice!: JuiceManager;
   private spawner = new Spawner();
   private meta: MetaProgression = MetaProgression.empty();
@@ -120,6 +128,9 @@ export class GameScene extends Phaser.Scene {
     this.nextZombieId = 0;
     this.bossZombie = null;
     this.bossHud = null;
+    this.bossWaveActive = false;
+    this.bossStartTimeMs = 0;
+    this.bossMinionIds = new Set();
     this.isPaused = false;
     this.meta = data.carryMeta ?? MetaProgression.empty();
     this.streak = data.carryStreak ?? null;
@@ -234,21 +245,61 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnBoss(): void {
+    const container = getContainer(this);
+    const chapterBranded = asChapterNumber(this.chapter);
+    const payload = spawnBossWave(chapterBranded);
+
+    // 1) CEO 스폰 (중앙 고정)
     const hp = bossHpForChapter(this.chapter);
     const cx = VIEWPORT.width / 2;
     const cy = VIEWPORT.height / 2;
-    const id = `boss-${this.chapter}`;
-    const z = new Zombie(this, cx, cy, { id, type: ZOMBIE_TYPE.CEO, hp, maxHp: hp });
-    this.bossZombie = z;
+    const ceoId = `boss-${this.chapter}`;
+    const ceo = new Zombie(this, cx, cy, { id: ceoId, type: ZOMBIE_TYPE.CEO, hp, maxHp: hp });
+    this.bossZombie = ceo;
     this.zombies.push({
-      id,
-      obj: z,
+      id: ceoId,
+      obj: ceo,
       type: ZOMBIE_TYPE.CEO,
       spawnedAt: this.time.now,
       lifespanMs: 60000,
     });
+
+    // 2) 미니언 일괄 스폰 (한 frame 내) — 기존 spawner 좌표 로직 재사용
+    this.bossMinionIds = new Set();
+    for (const spec of payload.minions) {
+      for (let i = 0; i < spec.count; i++) {
+        const minionSpec = specOf(spec.type);
+        const existingPoints = this.zombies.map((z) => ({ x: z.obj.x, y: z.obj.y }));
+        const point = findSpawnPoint(
+          existingPoints,
+          SPAWN_AREA,
+          MIN_SPAWN_DISTANCE_PX,
+          container.ports.random,
+        );
+        const minionId = `boss-minion-${this.chapter}-${this.nextZombieId++}`;
+        const minion = new Zombie(this, point.x, point.y, {
+          id: minionId,
+          type: spec.type,
+          hp: minionSpec.hp,
+          maxHp: minionSpec.hp,
+        });
+        this.zombies.push({
+          id: minionId,
+          obj: minion,
+          type: spec.type,
+          spawnedAt: this.time.now,
+          lifespanMs: minionSpec.lifespanMs,
+        });
+        this.bossMinionIds.add(minionId);
+      }
+    }
+
+    // 3) HUD + 플래그
     this.bossHud = new BossHud(this, VIEWPORT.width / 2, px(40), hp);
     this.bossHud.setDepth(900);
+    this.bossWaveActive = true;
+    this.bossStartTimeMs = container.ports.clock.now();
+    void payload.phase; // phase config는 update() tick에서 fresh 조회 (격노 단계 반영)
   }
 
   private onZombieDown(_pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject): void {
@@ -333,6 +384,19 @@ export class GameScene extends Phaser.Scene {
 
   private onBossKilled(): void {
     this.isPaused = true;
+
+    // D6: 잔여 미니언 한 frame 내 일괄 폭사 — 점수 정상 인정, drop은 후속 spec 범위
+    for (const minionId of Array.from(this.bossMinionIds)) {
+      const entry = this.zombies.find((z) => z.id === minionId);
+      if (entry) {
+        const spec = specOf(entry.type);
+        this.score = this.score.add(spec.reward);
+        this.removeZombie(minionId);
+      }
+    }
+    this.bossMinionIds.clear();
+    this.bossWaveActive = false;
+
     if (this.bossHud) {
       this.bossHud.destroy();
       this.bossHud = null;
@@ -397,6 +461,12 @@ export class GameScene extends Phaser.Scene {
       }
     }
     for (const id of toRemove) {
+      // D5 γ 격리: 보스 wave 중 미니언 도주는 fled 카운트 안 함, combo도 유지
+      if (this.bossWaveActive && this.bossMinionIds.has(id)) {
+        this.bossMinionIds.delete(id);
+        this.removeZombie(id);
+        continue;
+      }
       this.fled += 1;
       this.resolvedInWave += 1;
       this.combo = this.combo.miss();
@@ -412,6 +482,24 @@ export class GameScene extends Phaser.Scene {
       if (this.resolvedInWave >= this.currentZombiesPerWave()) {
         this.advanceWave();
       }
+    }
+
+    // boss 위치 갱신 (Lissajous 8자 + 격노 단계 가속)
+    if (this.bossWaveActive && this.bossZombie) {
+      const container = getContainer(this);
+      const chapterBranded = asChapterNumber(this.chapter);
+      const basePhase = getPhaseConfig(chapterBranded);
+      const maxHp = bossHpForChapter(this.chapter);
+      const rage = computeRageLevel(this.bossZombie.hp, maxHp, chapterBranded);
+      const effective = applyRageMultipliers(basePhase, rage);
+      const pos = tickBossPosition({
+        clock: container.ports.clock,
+        bossStartTimeMs: this.bossStartTimeMs,
+        center: { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 },
+        R: effective.R,
+        omega: effective.omega,
+      });
+      this.bossZombie.setPosition(pos.x, pos.y);
     }
 
     // boss HP 동기화
