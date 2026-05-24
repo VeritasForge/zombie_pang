@@ -379,6 +379,7 @@ Application ≥ 70%
 | Snapshot 테스트 남용 | behavior 기반 expect | Vitest 안티패턴 |
 | Cypress 신규 채택 | Playwright | E2E 일관성 |
 | ESLint + Prettier 추가 | Biome 단일 | 빌드 속도 + 일관성 |
+| debug/test hook을 `typeof window` 가드만으로 노출 | `import.meta.env.DEV \|\| VITE_ZP_E2E` env flag 가드 | production cheat 차단 (상세: `.claude/rules/debug-hook-safety.md`) |
 
 ---
 
