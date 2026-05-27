@@ -15,6 +15,14 @@ describe("isBossClimax", () => {
   it("[Error] 음수 hp → true (0 이하)", () => expect(isBossClimax(-1, 100)).toBe(true));
   it("[Error] NaN maxHp → false", () => expect(isBossClimax(5, Number.NaN)).toBe(false));
   it("[Error] NaN hp → false", () => expect(isBossClimax(Number.NaN, 100)).toBe(false));
+  // mutation: maxHp 가드가 `<= 0`(=0 포함)이라 음수 hp에서도 false (`< 0` 변이 kill)
+  it("[Error] 음수 hp + maxHp=0 → false (maxHp 가드 우선)", () =>
+    expect(isBossClimax(-1, 0)).toBe(false));
+  // mutation: hp 유한성 가드 없으면 -Infinity/maxHp = -Infinity ≤ 0.25 = true가 되는 것 방지
+  it("[Error] -Infinity hp → false (유한성 가드)", () =>
+    expect(isBossClimax(Number.NEGATIVE_INFINITY, 100)).toBe(false));
+  it("[Error] +Infinity hp → false", () =>
+    expect(isBossClimax(Number.POSITIVE_INFINITY, 100)).toBe(false));
   // 상수 노출
   it("[Boundary] CLIMAX_HP_RATIO === 0.25", () => expect(CLIMAX_HP_RATIO).toBe(0.25));
 });
