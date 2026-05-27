@@ -39,6 +39,11 @@ const EVENT_TONES: Record<AudioEvent, readonly ToneSpec[]> = {
     { type: "square", freq: 200, durationS: 0.3, gain: 0.12, delayS: 0.05 },
     { type: "sine", freq: 600, durationS: 0.15, gain: 0.16, delayS: 0.25 },
   ],
+  boss_approaching: [
+    // 하강 저음 rumble (보스 임박 telegraph). 60→40Hz.
+    { type: "sawtooth", freq: 60, freqEnd: 40, durationS: 0.8, gain: 0.2 },
+    { type: "square", freq: 120, freqEnd: 90, durationS: 0.6, gain: 0.08, delayS: 0.05 },
+  ],
   wave_clear: [
     { type: "sine", freq: 523, durationS: 0.18, gain: 0.16 },
     { type: "sine", freq: 659, durationS: 0.18, gain: 0.14, delayS: 0.15 },

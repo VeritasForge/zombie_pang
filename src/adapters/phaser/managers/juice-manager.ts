@@ -4,7 +4,7 @@
 import type { IAudio } from "@domain/ports/audio";
 import type { IHaptic } from "@domain/ports/haptic";
 import Phaser from "phaser";
-import { COLORS, FPS, TIMINGS, VIEWPORT } from "../config";
+import { COLORS, FPS, TIMINGS, VIEWPORT, px } from "../config";
 import { ParticleSystem, type ParticleTheme } from "../objects/particle";
 
 export type KillJuiceEvent = "normal" | "crit" | "combo_5+" | "boss_kill" | "wave_clear";
@@ -153,6 +153,32 @@ export class JuiceManager {
         this.activeFreezeOverlays = this.activeFreezeOverlays.filter((o) => o !== overlay);
       },
     });
+  }
+
+  /** BOSS APPROACHING 무텍스트 cue — 4코너→중앙 수렴 펄스 ×2 + 약한 셰이크 + haptic. */
+  playBossApproaching(): void {
+    const cam = this.scene.cameras.main;
+    this.audio.play("boss_approaching");
+    this.haptic.vibrate([80, 40, 80]);
+    this.applyShake(TIMINGS.shake.normal, 200);
+    for (let pulse = 0; pulse < 2; pulse++) {
+      const ring = this.scene.add.graphics();
+      ring.setScrollFactor(0).setDepth(998);
+      ring.x = cam.width / 2;
+      ring.y = cam.height / 2;
+      ring.lineStyle(px(6), 0xff2d2d, 0.6);
+      ring.strokeRect(-cam.width / 2, -cam.height / 2, cam.width, cam.height);
+      this.scene.tweens.add({
+        targets: ring,
+        scaleX: 0.7,
+        scaleY: 0.7,
+        alpha: 0,
+        delay: pulse * 250,
+        duration: 350,
+        ease: "Quad.easeIn",
+        onComplete: () => ring.destroy(),
+      });
+    }
   }
 
   emitParticles(x: number, y: number, count: number, theme: ParticleTheme): void {

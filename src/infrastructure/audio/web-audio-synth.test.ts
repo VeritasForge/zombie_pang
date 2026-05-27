@@ -20,6 +20,7 @@ describe("WebAudioSynth", () => {
       "combo_5",
       "powerup_pickup",
       "boss_kill",
+      "boss_approaching",
       "wave_clear",
       "hit",
       "menu_select",
@@ -28,6 +29,12 @@ describe("WebAudioSynth", () => {
     for (const e of events) {
       expect(() => synth.play(e)).not.toThrow();
     }
+  });
+
+  // [Happy] boss_approaching(하강 저음 rumble)도 안전하게 재생 시도
+  it("[Happy] boss_approaching does not throw", () => {
+    const synth = new WebAudioSynth();
+    expect(() => synth.play("boss_approaching")).not.toThrow();
   });
 
   it("[Error] silent when AudioContext is absent", () => {

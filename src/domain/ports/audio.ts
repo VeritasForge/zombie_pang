@@ -8,6 +8,7 @@ export type AudioEvent =
   | "combo_5"
   | "powerup_pickup"
   | "boss_kill"
+  | "boss_approaching"
   | "wave_clear"
   | "hit"
   | "menu_select";

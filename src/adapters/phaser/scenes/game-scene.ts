@@ -603,6 +603,15 @@ export class GameScene extends Phaser.Scene {
     this.killedInWave = 0;
     this.resolvedInWave = 0;
     this.juice.applyKillJuice("wave_clear", VIEWPORT.width / 2, VIEWPORT.height / 2, "paper");
+    // wave 10(보스) 진입: wave_clear 후 ~200ms gap → BOSS APPROACHING cue 0.8s → 보스 스폰.
+    if (Wave.of(this.wave).isBossWave()) {
+      this.time.delayedCall(200, () => {
+        this.juice.playBossApproaching();
+        this.time.delayedCall(800, () => this.scheduleNextSpawn());
+      });
+      this.publishHud();
+      return;
+    }
     this.scheduleNextSpawn();
     this.publishHud();
   }
