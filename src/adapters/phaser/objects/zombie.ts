@@ -9,7 +9,7 @@
 import type { ZombieType } from "@domain/wave/zombie-type";
 import { ZOMBIE_TYPE } from "@domain/wave/zombie-type";
 import Phaser from "phaser";
-import { COLORS, px } from "../config";
+import { COLORS, MASK_COLORS, MASK_NEEDS_STROKE, px } from "../config";
 
 // emoji 시각 반지름 ≈ fontSize / 2. 여기에 padding으로 모바일 터치 친화도 확보 + 가장자리를
 // 살짝 벗어나도 사냥 가능. spec.fontSize는 이미 dpr 곱한 값(px(56) 등), padding도 동일 단위.
@@ -22,6 +22,7 @@ type ZombieVisualSpec = {
   readonly fontSize: number; // 이미 dpr 곱한 backing buffer 단위.
   readonly auraColor: number;
   readonly auraRadius: number; // 이미 dpr 곱한 backing buffer 단위.
+  readonly maskColor: number; // 직급 위계 마스크 색 (Bible §2).
 };
 
 const VISUAL_SPECS: Record<ZombieType, ZombieVisualSpec> = {
@@ -30,24 +31,28 @@ const VISUAL_SPECS: Record<ZombieType, ZombieVisualSpec> = {
     fontSize: px(56),
     auraColor: COLORS.intern,
     auraRadius: px(36),
+    maskColor: MASK_COLORS.intern,
   },
   [ZOMBIE_TYPE.MIDDLE]: {
     emoji: "\u{1F9DF}‍♂️", // 🧟‍♂️
     fontSize: px(60),
     auraColor: COLORS.middle,
     auraRadius: px(40),
+    maskColor: MASK_COLORS.middle,
   },
   [ZOMBIE_TYPE.LEAD]: {
     emoji: "\u{1F9DF}‍♀️", // 🧟‍♀️
     fontSize: px(64),
     auraColor: COLORS.lead,
     auraRadius: px(44),
+    maskColor: MASK_COLORS.lead,
   },
   [ZOMBIE_TYPE.CEO]: {
     emoji: "\u{1F9E0}", // 🧠
     fontSize: px(96),
     auraColor: COLORS.ceo,
     auraRadius: px(70),
+    maskColor: MASK_COLORS.ceo,
   },
 };
 
@@ -98,6 +103,20 @@ export class Zombie extends Phaser.GameObjects.Container {
     });
     this.emojiText.setOrigin(0.5, 0.5);
     this.add(this.emojiText);
+
+    // 2.5) 마스크 표식 — 직급 위계(Bible §2). 폭=fontSize*0.4, 높이=px(6), 이모지 하단 px(4).
+    // 진회/검정은 어두운 배경 대비 부족 → maskWhite stroke로 외곽 분리(대비 ≥3:1, WCAG 1.4.11).
+    const maskW = spec.fontSize * 0.4;
+    const maskH = px(6);
+    const maskY = spec.fontSize / 2 + px(4);
+    const mask = scene.add.graphics();
+    mask.fillStyle(spec.maskColor, 1);
+    mask.fillRoundedRect(-maskW / 2, maskY, maskW, maskH, px(2));
+    if (MASK_NEEDS_STROKE.has(spec.maskColor)) {
+      mask.lineStyle(px(2), COLORS.maskWhite, 1);
+      mask.strokeRoundedRect(-maskW / 2, maskY, maskW, maskH, px(2));
+    }
+    this.add(mask);
 
     // 3) HP bar (hp > 1 좀비만)
     if (init.maxHp > 1) {

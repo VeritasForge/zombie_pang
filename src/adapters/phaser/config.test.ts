@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INTERIOR_PALETTES } from "./config";
+import { INTERIOR_PALETTES, MASK_COLORS, MASK_NEEDS_STROKE } from "./config";
 
 describe("INTERIOR_PALETTES", () => {
   // [Happy] 챕터 1~5 모두 정의됨
@@ -23,5 +23,21 @@ describe("INTERIOR_PALETTES", () => {
   it("[Error] 챕터 0/6은 undefined", () => {
     expect(INTERIOR_PALETTES[0]).toBeUndefined();
     expect(INTERIOR_PALETTES[6]).toBeUndefined();
+  });
+});
+
+describe("MASK_COLORS", () => {
+  // [Happy] 4종 마스크 색 distinct
+  it("[Happy] 4종 마스크 색 distinct", () => {
+    const vals = Object.values(MASK_COLORS);
+    expect(new Set(vals).size).toBe(4);
+  });
+
+  // [Boundary] 진회/검정은 stroke 필요, 흰/회는 불필요
+  it("[Boundary] 진회·검정만 stroke 대상", () => {
+    expect(MASK_NEEDS_STROKE.has(MASK_COLORS.lead)).toBe(true);
+    expect(MASK_NEEDS_STROKE.has(MASK_COLORS.ceo)).toBe(true);
+    expect(MASK_NEEDS_STROKE.has(MASK_COLORS.intern)).toBe(false);
+    expect(MASK_NEEDS_STROKE.has(MASK_COLORS.middle)).toBe(false);
   });
 });

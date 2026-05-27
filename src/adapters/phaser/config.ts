@@ -56,6 +56,16 @@ export const INTERIOR_PALETTES: Record<number, InteriorPalette> = {
   5: { bg: "#0d0d1a", accent: 0xff2d87, motif: "kpi" },
 } as const;
 
+// 좀비 직급 마스크 색 (Bible §2). 진회/검정은 어두운 배경 대비 부족 → stroke 보조(zombie.ts).
+export const MASK_COLORS = {
+  intern: 0xf0ead6, // 흰
+  middle: 0x7a7a7a, // 회
+  lead: 0x3a3a3a, // 진회
+  ceo: 0x0a0a0a, // 검정
+} as const;
+// stroke가 필요한(어두운) 마스크 — 대비 ≥3:1 확보용 maskWhite 외곽선.
+export const MASK_NEEDS_STROKE = new Set<number>([0x3a3a3a, 0x0a0a0a]);
+
 // VIEWPORT는 backing buffer 크기. 게임 좌표는 모두 이 단위로 표현된다.
 export const VIEWPORT = { width: BASE_W * DPR, height: BASE_H * DPR } as const;
 
