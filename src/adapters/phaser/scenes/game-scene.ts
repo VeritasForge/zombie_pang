@@ -3,6 +3,7 @@
 
 import { spawnBossWave } from "@application/spawn-boss-wave";
 import { tickBossPosition } from "@application/tick-boss-position";
+import { isBossClimax } from "@domain/boss/boss-climax";
 import type { PhaseConfig } from "@domain/boss/boss-phase-config";
 import { applyRageMultipliers, computeRageLevel } from "@domain/boss/boss-rage-level";
 import type { DailyStreak } from "@domain/meta/daily-streak";
@@ -122,6 +123,8 @@ export class GameScene extends Phaser.Scene {
   // F11: spawnBossWave use case가 반환하는 phase config를 spawn 시점에 cache.
   // 매 frame getPhaseConfig 재호출 회피 + use case 출력의 절반(payload.phase) silent 폐기 차단.
   private bossPhaseConfig: PhaseConfig | null = null;
+  // climax(슬로우모션) 진입 latch — HP 감소만이라 한번 true면 처치까지 유지. omega base×0.3 대체.
+  private bossClimaxActive = false;
   private juice!: JuiceManager;
   private spawner = new Spawner();
   private meta: MetaProgression = MetaProgression.empty();
@@ -153,6 +156,7 @@ export class GameScene extends Phaser.Scene {
     this.bossStartTimeMs = 0;
     this.bossMinionIds = new Set();
     this.bossPhaseConfig = null;
+    this.bossClimaxActive = false;
     this.isPaused = false;
     this.meta = data.carryMeta ?? MetaProgression.empty();
     this.streak = data.carryStreak ?? null;
@@ -292,6 +296,8 @@ export class GameScene extends Phaser.Scene {
         this.bossStartTimeMs = 0;
         this.bossMinionIds.clear();
         this.bossPhaseConfig = null;
+        this.bossClimaxActive = false;
+        this.juice.setBossClimax(false);
         // 잔여 일반 좀비 cleanup — boss spawn 직후 5개(CEO+미니언) 단언을 위해.
         for (const z of [...this.zombies]) {
           z.obj.destroy();
@@ -562,6 +568,8 @@ export class GameScene extends Phaser.Scene {
     this.bossWaveActive = false;
     // F11: phase config cache 정리 — 다음 보스 wave에서 fresh use case 호출 보장.
     this.bossPhaseConfig = null;
+    this.bossClimaxActive = false;
+    this.juice.setBossClimax(false);
 
     if (this.bossHud) {
       this.bossHud.destroy();
@@ -667,12 +675,18 @@ export class GameScene extends Phaser.Scene {
       const maxHp = bossHpForChapter(this.chapter);
       const rage = computeRageLevel(this.bossZombie.hp, maxHp, chapterBranded);
       const effective = applyRageMultipliers(this.bossPhaseConfig, rage);
+      // climax: HP ≤25% 진입 시 omega를 base 기준 ×0.3로 "대체"(rage 곱 무시). one-way latch.
+      if (isBossClimax(this.bossZombie.hp, maxHp) && !this.bossClimaxActive) {
+        this.bossClimaxActive = true;
+        this.juice.setBossClimax(true);
+      }
+      const omega = this.bossClimaxActive ? this.bossPhaseConfig.omega * 0.3 : effective.omega;
       const pos = tickBossPosition({
         clock: container.ports.clock,
         bossStartTimeMs: this.bossStartTimeMs,
         center: { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 },
         R: effective.R,
-        omega: effective.omega,
+        omega,
       });
       this.bossZombie.setPosition(pos.x, pos.y);
     }

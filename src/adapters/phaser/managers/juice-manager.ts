@@ -14,6 +14,7 @@ export class JuiceManager {
   private framesBelowThreshold = 0;
   private particleScale: 1 | 0.5 | 0.25 = 1;
   private flashOverlay: Phaser.GameObjects.Rectangle | null = null;
+  private climaxVignette: Phaser.GameObjects.Graphics | null = null;
   // freeze frame overlay는 매 호출마다 새 Rectangle을 생성. tween onComplete에서 destroy되지만
   // boss kill 등으로 scene이 stop되는 경우 tween cancel 후 overlay가 잔존할 수 있음.
   // 추적 후 destroy()에서 일괄 정리하여 다음 scene의 입력을 가리지 않도록 보장.
@@ -181,12 +182,43 @@ export class JuiceManager {
     }
   }
 
+  /** climax desaturate throb 비네트 on/off. idempotent. 채도 저하 인상(색 무관) — alpha throb. */
+  setBossClimax(active: boolean): void {
+    if (active) {
+      if (this.climaxVignette) return; // idempotent
+      const cam = this.scene.cameras.main;
+      const g = this.scene.add.graphics();
+      g.setScrollFactor(0).setDepth(997);
+      // 가장자리 어둑 비네트 (중앙은 투명) — 4변 근사.
+      const edge = px(60);
+      g.fillStyle(0x000000, 0.35);
+      g.fillRect(0, 0, cam.width, edge);
+      g.fillRect(0, cam.height - edge, cam.width, edge);
+      g.fillRect(0, 0, edge, cam.height);
+      g.fillRect(cam.width - edge, 0, edge, cam.height);
+      this.climaxVignette = g;
+      this.scene.tweens.add({
+        targets: g,
+        alpha: 0.6,
+        duration: 600,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    } else if (this.climaxVignette) {
+      this.scene.tweens.killTweensOf(this.climaxVignette);
+      this.climaxVignette.destroy();
+      this.climaxVignette = null;
+    }
+  }
+
   emitParticles(x: number, y: number, count: number, theme: ParticleTheme): void {
     const scaled = Math.max(2, Math.floor(count * this.particleScale));
     this.particles.emit(x, y, scaled, theme);
   }
 
   destroy(): void {
+    this.setBossClimax(false);
     this.particles.destroy();
     if (this.flashOverlay) {
       this.flashOverlay.destroy();
