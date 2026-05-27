@@ -125,6 +125,7 @@ export class GameScene extends Phaser.Scene {
   private bossPhaseConfig: PhaseConfig | null = null;
   // climax(슬로우모션) 진입 latch — HP 감소만이라 한번 true면 처치까지 유지. omega base×0.3 대체.
   private bossClimaxActive = false;
+  private bossClimaxStartMs = 0;
   private juice!: JuiceManager;
   private spawner = new Spawner();
   private meta: MetaProgression = MetaProgression.empty();
@@ -613,6 +614,10 @@ export class GameScene extends Phaser.Scene {
     this.juice.applyKillJuice("wave_clear", VIEWPORT.width / 2, VIEWPORT.height / 2, "paper");
     // wave 10(보스) 진입: wave_clear 후 ~200ms gap → BOSS APPROACHING cue 0.8s → 보스 스폰.
     if (Wave.of(this.wave).isBossWave()) {
+      // cue 시퀀스(1초) 동안 update() spawn tick이 stale nextSpawnAtMs로 일반 좀비를 스폰하지
+      // 않도록 즉시 Infinity로 차단. (scheduleNextSpawn boss 분기가 하던 불변을 진입 시 복원.)
+      // 누락 시: 보스 wave에 1-HP 가짜 CEO가 스폰되고, 탭 시 onBossKilled로 챕터 무료 클리어.
+      this.nextSpawnAtMs = Number.POSITIVE_INFINITY;
       this.time.delayedCall(200, () => {
         this.juice.playBossApproaching();
         this.time.delayedCall(800, () => this.scheduleNextSpawn());
@@ -678,9 +683,18 @@ export class GameScene extends Phaser.Scene {
       // climax: HP ≤25% 진입 시 omega를 base 기준 ×0.3로 "대체"(rage 곱 무시). one-way latch.
       if (isBossClimax(this.bossZombie.hp, maxHp) && !this.bossClimaxActive) {
         this.bossClimaxActive = true;
+        this.bossClimaxStartMs = container.ports.clock.now();
         this.juice.setBossClimax(true);
       }
-      const omega = this.bossClimaxActive ? this.bossPhaseConfig.omega * 0.3 : effective.omega;
+      // ~0.3s ease ramp로 effective.omega → base×0.3 보간 (hard toggle 위상 점프 완화, spec 결정3).
+      let omega = effective.omega;
+      if (this.bossClimaxActive) {
+        const rampMs = 300;
+        const elapsed = container.ports.clock.now() - this.bossClimaxStartMs;
+        const t = Math.max(0, Math.min(1, elapsed / rampMs));
+        const target = this.bossPhaseConfig.omega * 0.3;
+        omega = effective.omega + (target - effective.omega) * t;
+      }
       const pos = tickBossPosition({
         clock: container.ports.clock,
         bossStartTimeMs: this.bossStartTimeMs,

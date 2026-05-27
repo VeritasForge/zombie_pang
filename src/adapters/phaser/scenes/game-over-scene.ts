@@ -35,6 +35,15 @@ export type GameOverInitData = {
   readonly bestReachedChapter: number;
 };
 
+// 챕터 → 부서명 (Bible §2 5막). drawBuilding 전환 컷인 텍스트.
+const DEPT_NAMES: Record<number, string> = {
+  1: "신입부서",
+  2: "영업본부",
+  3: "R&D",
+  4: "임원실",
+  5: "CEO 집무실",
+};
+
 /** init.score가 number이면 Score VO로 lift. Score 인스턴스면 그대로 반환. */
 function toScore(s: Score | number): Score {
   return typeof s === "number" ? Score.from(s) : s;
@@ -184,14 +193,7 @@ export class GameOverScene extends Phaser.Scene {
     this.tweens.add({ targets: group, scale: 1, duration: 1200, ease: "Quad.easeOut" });
 
     // 부서명 (전환 화면 텍스트 허용 — ADR-0010 인게임 범위 밖)
-    const deptNames: Record<number, string> = {
-      1: "신입부서",
-      2: "영업본부",
-      3: "R&D",
-      4: "임원실",
-      5: "CEO 집무실",
-    };
-    const dept = deptNames[clamped] ?? "";
+    const dept = DEPT_NAMES[clamped] ?? "";
     const deptText = this.add.text(cx, top - px(10), dept, {
       fontFamily: FONT_FAMILY,
       fontSize: fontPx(13),
