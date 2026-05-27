@@ -18,7 +18,14 @@ import { ZOMBIE_TYPE, type ZombieType, specOf } from "@domain/wave/zombie-type";
 import { getContainer } from "@infrastructure/container";
 import { asChapterNumber } from "@shared/types/branded";
 import Phaser from "phaser";
-import { COLOR_HEX, SCENE_KEYS, VIEWPORT, px } from "../config";
+import {
+  COLOR_HEX,
+  INTERIOR_PALETTES,
+  type InteriorPalette,
+  SCENE_KEYS,
+  VIEWPORT,
+  px,
+} from "../config";
 import { JuiceManager } from "../managers/juice-manager";
 import { BossHud } from "../objects/boss-hud";
 import { Zombie } from "../objects/zombie";
@@ -159,7 +166,13 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     const container = getContainer(this);
-    this.cameras.main.setBackgroundColor(COLOR_HEX.bgDark);
+    const palette = INTERIOR_PALETTES[this.chapter] ?? INTERIOR_PALETTES[1];
+    if (palette) {
+      this.cameras.main.setBackgroundColor(palette.bg);
+      this.drawInteriorMotif(palette);
+    } else {
+      this.cameras.main.setBackgroundColor(COLOR_HEX.bgDark);
+    }
 
     // 첫 챕터 시작 시 startRun 호출.
     if (this.runId === "") {
@@ -204,6 +217,44 @@ export class GameScene extends Phaser.Scene {
     // e2e 검증용 — window에 현재 활성 scene 표시 (Playwright polling 진입점).
     this.publishE2eState();
     this.exposeTestHooks();
+  }
+
+  /** 챕터 인테리어 모티프 — 자산 0, Graphics 도형 암시. alpha 낮게(게임플레이 방해 X). */
+  private drawInteriorMotif(palette: InteriorPalette): void {
+    const g = this.add.graphics();
+    g.setDepth(-10);
+    const w = VIEWPORT.width;
+    const h = VIEWPORT.height;
+    g.lineStyle(px(2), palette.accent, 0.22);
+    g.fillStyle(palette.accent, 0.1);
+    switch (palette.motif) {
+      case "fluorescent": // 형광등 막대 3개 (가로)
+        for (let i = 1; i <= 3; i++) {
+          const y = (h * i) / 4;
+          g.lineBetween(px(40), y, w - px(40), y);
+        }
+        break;
+      case "headset": // 헤드셋 원호 2개
+        g.strokeCircle(w / 2, h * 0.3, px(120));
+        g.strokeCircle(w / 2, h * 0.7, px(90));
+        break;
+      case "whiteboard": // 화이트보드 격자
+        for (let x = px(40); x < w; x += px(60)) g.lineBetween(x, px(80), x, h - px(80));
+        for (let y = px(80); y < h; y += px(60)) g.lineBetween(px(40), y, w - px(40), y);
+        break;
+      case "carpet": // 카펫 대각 질감
+        for (let x = -h; x < w; x += px(48)) g.lineBetween(x, 0, x + h, h);
+        break;
+      case "kpi": // KPI 꺾은선 (상승)
+        g.beginPath();
+        g.moveTo(px(20), h * 0.8);
+        g.lineTo(w * 0.3, h * 0.6);
+        g.lineTo(w * 0.55, h * 0.68);
+        g.lineTo(w * 0.8, h * 0.35);
+        g.lineTo(w - px(20), h * 0.2);
+        g.strokePath();
+        break;
+    }
   }
 
   /**

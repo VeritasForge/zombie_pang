@@ -39,6 +39,23 @@ export const COLOR_HEX = {
   comboGold: "#FFCE00",
 } as const;
 
+export type MotifId = "fluorescent" | "headset" | "whiteboard" | "carpet" | "kpi";
+
+export type InteriorPalette = {
+  readonly bg: string; // setBackgroundColor용 "#rrggbb"
+  readonly accent: number; // Graphics fillStyle용 0xrrggbb
+  readonly motif: MotifId;
+};
+
+// 챕터(1~5) → 인테리어 톤 (Bible §2 5막). bg는 어두운 베이스, accent는 모티프 색.
+export const INTERIOR_PALETTES: Record<number, InteriorPalette> = {
+  1: { bg: "#1a1a26", accent: 0x6bcb77, motif: "fluorescent" },
+  2: { bg: "#201a26", accent: 0xffd93d, motif: "headset" },
+  3: { bg: "#15211f", accent: 0x4dd0e1, motif: "whiteboard" },
+  4: { bg: "#261f1a", accent: 0xc9a227, motif: "carpet" },
+  5: { bg: "#0d0d1a", accent: 0xff2d87, motif: "kpi" },
+} as const;
+
 // VIEWPORT는 backing buffer 크기. 게임 좌표는 모두 이 단위로 표현된다.
 export const VIEWPORT = { width: BASE_W * DPR, height: BASE_H * DPR } as const;
 
