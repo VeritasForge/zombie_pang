@@ -4,10 +4,20 @@
 import { type EndRunReason, type LeaderboardEntry, STORAGE_KEYS_RUN } from "@application/end-run";
 import type { DailyStreak } from "@domain/meta/daily-streak";
 import { MetaProgression } from "@domain/meta/progression";
+import { TOTAL_FLOORS, litFloorsFor } from "@domain/run/building-progress";
 import { Score } from "@domain/score/score";
 import { getContainer } from "@infrastructure/container";
 import Phaser from "phaser";
-import { COLORS, COLOR_HEX, FONT_FAMILY, SCENE_KEYS, VIEWPORT, fontPx, px } from "../config";
+import {
+  COLORS,
+  COLOR_HEX,
+  FONT_FAMILY,
+  INTERIOR_PALETTES,
+  SCENE_KEYS,
+  VIEWPORT,
+  fontPx,
+  px,
+} from "../config";
 import { UpgradeCard } from "../objects/upgrade-card";
 
 type EndKind = "clear" | "chapter_end" | "early_exit" | "fled_limit";
@@ -64,6 +74,9 @@ export class GameOverScene extends Phaser.Scene {
   private renderChapterEnd(data: GameOverInitData): void {
     const container = getContainer(this);
     const cx = VIEWPORT.width / 2;
+
+    // 사옥 빌딩 배경 레이어 — 누적 점등 + 줌아웃 (카드 fan-out 전, depth 0).
+    this.drawBuilding(data.bestReachedChapter);
 
     const title = this.add.text(cx, px(80), `Chapter ${data.chapter} Clear`, {
       fontFamily: FONT_FAMILY,
@@ -129,6 +142,62 @@ export class GameOverScene extends Phaser.Scene {
     this.makeButton(cx, btnY2, px(200), px(40), "메인 메뉴", COLORS.maskWhite, () => {
       this.endRunWith(data, "early_exit");
     });
+  }
+
+  /** 사옥 빌딩 미니어처 — 배경 레이어. 누적 점등 + 줌아웃. depth 0(카드는 위). */
+  private drawBuilding(chaptersCleared: number): void {
+    const cx = VIEWPORT.width / 2;
+    const bw = px(120);
+    const bh = px(500);
+    const top = px(60);
+    const floorH = bh / TOTAL_FLOORS;
+    const lit = litFloorsFor(chaptersCleared);
+    const clamped = Math.min(5, Math.max(1, Math.floor(chaptersCleared)));
+    const palette = INTERIOR_PALETTES[clamped] ?? INTERIOR_PALETTES[1];
+    const accent = palette?.accent ?? COLORS.limeGreen;
+
+    const group = this.add.container(cx, top + bh / 2);
+    group.setDepth(0).setAlpha(0.5);
+
+    const frame = this.add.graphics();
+    frame.lineStyle(px(2), COLORS.maskWhite, 0.6);
+    frame.strokeRect(-bw / 2, -bh / 2, bw, bh);
+    group.add(frame);
+
+    // 점등 층: 아래(1F)→위 누적. 방금 클리어한 10층은 stagger 점등 tween.
+    const justCleared = Math.max(0, Math.floor(chaptersCleared)) * 10;
+    const prevLit = Math.max(0, lit - 10);
+    for (let f = 0; f < lit; f++) {
+      const y = bh / 2 - (f + 1) * floorH;
+      const cell = this.add.graphics();
+      cell.fillStyle(accent, 0.85);
+      cell.fillRect(-bw / 2 + px(3), y + px(1), bw - px(6), floorH - px(2));
+      group.add(cell);
+      if (f >= prevLit && f < justCleared) {
+        cell.setAlpha(0);
+        this.tweens.add({ targets: cell, alpha: 1, delay: (f - prevLit) * 150, duration: 200 });
+      }
+    }
+
+    // 줌아웃 (한 층 더 정복)
+    group.setScale(1.1);
+    this.tweens.add({ targets: group, scale: 1, duration: 1200, ease: "Quad.easeOut" });
+
+    // 부서명 (전환 화면 텍스트 허용 — ADR-0010 인게임 범위 밖)
+    const deptNames: Record<number, string> = {
+      1: "신입부서",
+      2: "영업본부",
+      3: "R&D",
+      4: "임원실",
+      5: "CEO 집무실",
+    };
+    const dept = deptNames[clamped] ?? "";
+    const deptText = this.add.text(cx, top - px(10), dept, {
+      fontFamily: FONT_FAMILY,
+      fontSize: fontPx(13),
+      color: COLOR_HEX.limeGreen,
+    });
+    deptText.setOrigin(0.5, 1).setDepth(11);
   }
 
   private renderRunEnd(data: GameOverInitData): void {
