@@ -129,7 +129,9 @@ export class GameOverScene extends Phaser.Scene {
         },
       );
       return { highScoreUpdated: result.highScoreUpdated };
-    } catch {
+    } catch (err) {
+      // biome-ignore lint/suspicious/noConsole: 저장 실패는 사용자 디버깅용 경고 출력이 필요.
+      console.warn("[좀비팡] endRun 실패 — 점수/리더보드 저장 누락 가능", err);
       return { highScoreUpdated: false };
     }
   }

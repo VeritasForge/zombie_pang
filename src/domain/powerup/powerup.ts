@@ -1,7 +1,7 @@
 // Power-up 3종 (Bible §3, §4):
 //   - bomb: 즉발 (duration 0), 화면 전체 좀비 즉시 처치
 //   - freeze: 3000ms, 좀비 스폰 정지
-//   - magnet: 3000ms, 가장 가까운 좀비 자동 처치
+//   - magnet: 3000ms, 범위 내 좀비 자동 처치 + 범위 밖 좀비는 중앙으로 끌어당김
 
 export const POWERUP_TYPE = {
   BOMB: "bomb",
@@ -33,6 +33,7 @@ const SPECS: Record<PowerUpType, PowerUpSpec> = {
   [POWERUP_TYPE.MAGNET]: {
     type: POWERUP_TYPE.MAGNET,
     durationMs: 3000,
+    // effect 식별자는 "auto_kill_nearest" 유지(하위 호환) — 실제 동작은 범위 내 자동 처치 + 범위 밖 견인.
     effect: "auto_kill_nearest",
   },
 };

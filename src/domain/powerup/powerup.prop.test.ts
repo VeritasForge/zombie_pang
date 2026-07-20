@@ -1,7 +1,7 @@
 import type { IRandom } from "@domain/ports/random";
 import { fc, test } from "@fast-check/vitest";
 import { describe, expect } from "vitest";
-import { PowerUpDropPolicy, dropRateForCoinTier } from "./drop-policy";
+import { PowerUpDropPolicy } from "./drop-policy";
 import { ALL_POWERUP_TYPES, isPowerUpType } from "./powerup";
 
 class FakeRandom implements IRandom {
@@ -41,20 +41,4 @@ describe("PowerUpDropPolicy property-based", () => {
       expect(ALL_POWERUP_TYPES).toContain(result);
     }
   });
-
-  test.prop([fc.double({ min: 0, max: 0.999_999, noNaN: true, noDefaultInfinity: true })], {
-    seed: 7,
-    numRuns: 200,
-  })("[Boundary] dropOnBossKill은 항상 3종 중 하나", (r) => {
-    const policy = new PowerUpDropPolicy();
-    const result = policy.dropOnBossKill(new FakeRandom([r]));
-    expect(ALL_POWERUP_TYPES).toContain(result);
-  });
-
-  test.prop([fc.integer({ min: 1, max: 3 })], { seed: 11, numRuns: 50 })(
-    "[Boundary] dropRateForCoinTier는 단조 증가 (Tier ↑ → rate ↑)",
-    (tier) => {
-      expect(dropRateForCoinTier(tier)).toBeGreaterThan(dropRateForCoinTier(tier - 1));
-    },
-  );
 });

@@ -39,21 +39,17 @@ export const COLOR_HEX = {
   comboGold: "#FFCE00",
 } as const;
 
-export type MotifId = "fluorescent" | "headset" | "whiteboard" | "carpet" | "kpi";
-
 export type InteriorPalette = {
   readonly bg: string; // setBackgroundColor용 "#rrggbb"
-  readonly accent: number; // Graphics fillStyle용 0xrrggbb
-  readonly motif: MotifId;
 };
 
-// 챕터(1~5) → 인테리어 톤 (Bible §2 5막). bg는 어두운 베이스, accent는 모티프 색.
+// 챕터(1~5) → 인테리어 톤 (Bible §2 5막). bg는 어두운 베이스.
 export const INTERIOR_PALETTES: Record<number, InteriorPalette> = {
-  1: { bg: "#1a1a26", accent: 0x6bcb77, motif: "fluorescent" },
-  2: { bg: "#201a26", accent: 0xffd93d, motif: "headset" },
-  3: { bg: "#15211f", accent: 0x4dd0e1, motif: "whiteboard" },
-  4: { bg: "#261f1a", accent: 0xc9a227, motif: "carpet" },
-  5: { bg: "#0d0d1a", accent: 0xff2d87, motif: "kpi" },
+  1: { bg: "#1a1a26" },
+  2: { bg: "#201a26" },
+  3: { bg: "#15211f" },
+  4: { bg: "#261f1a" },
+  5: { bg: "#0d0d1a" },
 } as const;
 
 // 좀비 직급 마스크 색 (Bible §2). 진회/검정은 어두운 배경 대비 부족 → stroke 보조(zombie.ts).
@@ -70,16 +66,15 @@ export const MASK_NEEDS_STROKE = new Set<number>([0x3a3a3a, 0x0a0a0a]);
 export const VIEWPORT = { width: BASE_W * DPR, height: BASE_H * DPR } as const;
 
 export const TIMINGS = {
-  hitStop: { normal: 67, crit: 100, boss: 133 }, // ms — 시간 단위, 변환 X
+  hitStop: { normal: 67, crit: 100 }, // ms — 시간 단위, 변환 X
   // shake amplitude는 px 단위 → dpr 곱하기.
   shake: {
     normal: 6 * DPR,
     crit: 9 * DPR,
-    boss: 12 * DPR,
   },
   flash: { white: 16, gold: 33 }, // ms — 시간 단위, 변환 X
-  freeze: { boss: 600, waveClear: 300 }, // ms — 시간 단위, 변환 X
-  particleCount: { normal: 8, crit: 12, boss: 24 }, // count, 변환 X
+  freeze: { waveClear: 300 }, // ms — 시간 단위, 변환 X
+  particleCount: { normal: 8, crit: 12 }, // count, 변환 X
 } as const;
 
 // FPS 모니터 — adaptive degradation (Bible §5).

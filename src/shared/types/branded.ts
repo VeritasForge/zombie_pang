@@ -5,11 +5,9 @@ declare const brand: unique symbol;
 type Brand<T, B> = T & { readonly [brand]: B };
 
 export type ScoreValue = Brand<number, "ScoreValue">;
-export type CoinAmount = Brand<number, "CoinAmount">;
 export type FloorNumber = Brand<number, "FloorNumber">;
 export type ChapterNumber = Brand<number, "ChapterNumber">;
 export type WaveNumber = Brand<number, "WaveNumber">;
-export type StreakDays = Brand<number, "StreakDays">;
 export type ComboCount = Brand<number, "ComboCount">;
 
 export const asScoreValue = (n: number): ScoreValue => {
@@ -17,13 +15,6 @@ export const asScoreValue = (n: number): ScoreValue => {
     throw new RangeError(`Invalid ScoreValue: ${n}`);
   }
   return n as ScoreValue;
-};
-
-export const asCoinAmount = (n: number): CoinAmount => {
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
-    throw new RangeError(`Invalid CoinAmount: ${n}`);
-  }
-  return n as CoinAmount;
 };
 
 export const asChapterNumber = (n: number): ChapterNumber => {
@@ -38,13 +29,6 @@ export const asWaveNumber = (n: number): WaveNumber => {
     throw new RangeError(`Invalid WaveNumber: ${n}`);
   }
   return n as WaveNumber;
-};
-
-export const asStreakDays = (n: number): StreakDays => {
-  if (!Number.isInteger(n) || n < 0 || n > 7) {
-    throw new RangeError(`Invalid StreakDays: ${n}`);
-  }
-  return n as StreakDays;
 };
 
 export const asComboCount = (n: number): ComboCount => {

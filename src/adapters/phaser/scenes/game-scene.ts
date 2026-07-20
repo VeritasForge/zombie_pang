@@ -79,6 +79,7 @@ export class GameScene extends Phaser.Scene {
     this.activeEffects = [];
     this.nextZombieId = 0;
     this.isPaused = false;
+    this.registry.set("runEnding", false);
     if (data.carryRunId !== undefined) this.runId = data.carryRunId;
     if (data.carryStartedAt !== undefined) this.runStartedAt = data.carryStartedAt;
   }
@@ -365,6 +366,7 @@ export class GameScene extends Phaser.Scene {
 
   private endRunWith(reason: "clear" | "fled_limit"): void {
     this.isPaused = true;
+    this.registry.set("runEnding", true);
     const delay = reason === "clear" ? 900 : 500;
     this.time.delayedCall(delay, () => {
       this.scene.stop(SCENE_KEYS.hud);

@@ -77,6 +77,7 @@ export class HudScene extends Phaser.Scene {
     this.exitBtnZone.setInteractive();
     if (this.exitBtnZone.input) this.exitBtnZone.input.cursor = "pointer";
     this.exitBtnZone.on("pointerdown", () => {
+      if (this.registry.get("runEnding")) return;
       const hud = (this.registry.get("hud") as HudData | undefined) ?? DEFAULT_HUD;
       this.scene.stop(SCENE_KEYS.hud);
       this.scene.stop(SCENE_KEYS.game);

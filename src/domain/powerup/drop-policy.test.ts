@@ -1,11 +1,6 @@
 import type { IRandom } from "@domain/ports/random";
 import { describe, expect, it } from "vitest";
-import {
-  BASE_DROP_RATE,
-  COIN_TIER_MULTIPLIER,
-  PowerUpDropPolicy,
-  dropRateForCoinTier,
-} from "./drop-policy";
+import { BASE_DROP_RATE, PowerUpDropPolicy } from "./drop-policy";
 
 class FakeRandom implements IRandom {
   private idx = 0;
@@ -25,33 +20,6 @@ class FakeRandom implements IRandom {
     return items[this.nextInt(items.length)] as T;
   }
 }
-
-describe("dropRateForCoinTier", () => {
-  it("[Happy] Tier 0 = 5%, Tier 3 = 6.5% (대략)", () => {
-    expect(dropRateForCoinTier(0)).toBe(BASE_DROP_RATE);
-    expect(dropRateForCoinTier(3)).toBeCloseTo(BASE_DROP_RATE * COIN_TIER_MULTIPLIER ** 3, 5);
-    expect(dropRateForCoinTier(3)).toBeCloseTo(0.10985, 4); // 5 × 1.3^3 = 10.985%
-  });
-
-  it("[Boundary] Tier 0, 1, 2, 3 모두 허용", () => {
-    expect(dropRateForCoinTier(0)).toBe(0.05);
-    expect(dropRateForCoinTier(1)).toBeCloseTo(0.065, 4);
-    expect(dropRateForCoinTier(2)).toBeCloseTo(0.0845, 4);
-    expect(dropRateForCoinTier(3)).toBeCloseTo(0.10985, 4);
-  });
-
-  it("[Error] Tier 음수 throw", () => {
-    expect(() => dropRateForCoinTier(-1)).toThrow(RangeError);
-  });
-
-  it("[Error] Tier > 3 throw", () => {
-    expect(() => dropRateForCoinTier(4)).toThrow(RangeError);
-  });
-
-  it("[Error] Tier 소수 throw", () => {
-    expect(() => dropRateForCoinTier(1.5)).toThrow(RangeError);
-  });
-});
 
 describe("PowerUpDropPolicy.dropOnKill", () => {
   const policy = new PowerUpDropPolicy();
@@ -90,9 +58,8 @@ describe("PowerUpDropPolicy.dropOnKill", () => {
     expect(policy.dropOnKill(new FakeRandom([0.05]), 0.05)).toBeNull();
   });
 
-  it("[Boundary] Tier 3 max 6.5% 한도", () => {
-    const tier3Max = dropRateForCoinTier(1); // Tier 1 = 6.5%
-    expect(tier3Max).toBeCloseTo(0.065, 4);
+  it("[Boundary] BASE_DROP_RATE 값 = 5%", () => {
+    expect(BASE_DROP_RATE).toBe(0.05);
   });
 
   it("[Error] currentRate 음수 throw", () => {
@@ -113,26 +80,5 @@ describe("PowerUpDropPolicy.dropOnKill", () => {
 
   it("[Error] random.next() 음수 throw", () => {
     expect(() => policy.dropOnKill(new FakeRandom([-0.1]), 0.5)).toThrow(RangeError);
-  });
-});
-
-describe("PowerUpDropPolicy.dropOnBossKill", () => {
-  const policy = new PowerUpDropPolicy();
-
-  it("[Happy] 확정 drop, 3종 중 하나 반환 (idx 0 = bomb)", () => {
-    expect(policy.dropOnBossKill(new FakeRandom([0.0]))).toBe("bomb");
-  });
-
-  it("[Happy] idx 1 = freeze (균등)", () => {
-    expect(policy.dropOnBossKill(new FakeRandom([0.5]))).toBe("freeze");
-  });
-
-  it("[Happy] idx 2 = magnet (균등)", () => {
-    expect(policy.dropOnBossKill(new FakeRandom([0.999]))).toBe("magnet");
-  });
-
-  it("[Boundary] 3종 균등 분포 — 0.34는 freeze", () => {
-    // floor(0.34 * 3) = 1 → freeze
-    expect(policy.dropOnBossKill(new FakeRandom([0.34]))).toBe("freeze");
   });
 });

@@ -13,12 +13,6 @@ describe("INTERIOR_PALETTES", () => {
     expect(new Set(bgs).size).toBe(5);
   });
 
-  // [Boundary] 5개 motif id가 모두 다르다
-  it("[Boundary] 5개 motif가 모두 distinct", () => {
-    const motifs = [1, 2, 3, 4, 5].map((c) => INTERIOR_PALETTES[c]?.motif);
-    expect(new Set(motifs).size).toBe(5);
-  });
-
   // [Error] 범위 밖 챕터는 undefined (호출부 fallback 책임)
   it("[Error] 챕터 0/6은 undefined", () => {
     expect(INTERIOR_PALETTES[0]).toBeUndefined();

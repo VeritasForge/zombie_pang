@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   asChapterNumber,
-  asCoinAmount,
   asComboCount,
   asFloorNumber,
   asScoreValue,
-  asStreakDays,
   asWaveNumber,
 } from "./branded";
 
@@ -26,28 +24,6 @@ describe("asScoreValue", () => {
   it("[Error] NaN/Infinity는 throw", () => {
     expect(() => asScoreValue(Number.NaN)).toThrow(RangeError);
     expect(() => asScoreValue(Number.POSITIVE_INFINITY)).toThrow(RangeError);
-  });
-});
-
-describe("asCoinAmount", () => {
-  it("[Happy] 정수 0 이상 허용", () => {
-    expect(asCoinAmount(1000)).toBe(1000);
-  });
-
-  it("[Boundary] 0 허용", () => {
-    expect(asCoinAmount(0)).toBe(0);
-  });
-
-  it("[Error] 음수 throw", () => {
-    expect(() => asCoinAmount(-1)).toThrow(RangeError);
-  });
-
-  it("[Error] 소수는 throw", () => {
-    expect(() => asCoinAmount(1.5)).toThrow(RangeError);
-  });
-
-  it("[Error] NaN throw", () => {
-    expect(() => asCoinAmount(Number.NaN)).toThrow(RangeError);
   });
 });
 
@@ -84,24 +60,6 @@ describe("asWaveNumber", () => {
     expect(() => asWaveNumber(0)).toThrow(RangeError);
     expect(() => asWaveNumber(11)).toThrow(RangeError);
     expect(() => asWaveNumber(1.5)).toThrow(RangeError);
-  });
-});
-
-describe("asStreakDays", () => {
-  it("[Happy] 0~7 허용", () => {
-    expect(asStreakDays(0)).toBe(0);
-    expect(asStreakDays(7)).toBe(7);
-  });
-
-  it("[Boundary] 0, 7 경계", () => {
-    expect(asStreakDays(0)).toBe(0);
-    expect(asStreakDays(7)).toBe(7);
-  });
-
-  it("[Error] -1/8/소수 throw", () => {
-    expect(() => asStreakDays(-1)).toThrow(RangeError);
-    expect(() => asStreakDays(8)).toThrow(RangeError);
-    expect(() => asStreakDays(3.5)).toThrow(RangeError);
   });
 });
 
