@@ -14,7 +14,6 @@ import { PreloadScene } from "@adapters/phaser/scenes/preload-scene";
 import { applyPowerUp } from "@application/apply-powerup";
 import { endRun } from "@application/end-run";
 import { killZombie } from "@application/kill-zombie";
-import { pickUpgrade } from "@application/pick-upgrade";
 import { startRun } from "@application/start-run";
 import type { IAudio } from "@domain/ports/audio";
 import type { IClock } from "@domain/ports/clock";
@@ -34,7 +33,6 @@ export type UseCases = {
   readonly startRun: typeof startRun;
   readonly killZombie: typeof killZombie;
   readonly applyPowerUp: typeof applyPowerUp;
-  readonly pickUpgrade: typeof pickUpgrade;
   readonly endRun: typeof endRun;
 };
 
@@ -100,7 +98,6 @@ export function buildContainer(): Container {
       startRun,
       killZombie,
       applyPowerUp,
-      pickUpgrade,
       endRun,
     },
     audioManager,

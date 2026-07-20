@@ -4,19 +4,18 @@
 import type { IAudio } from "@domain/ports/audio";
 import type { IHaptic } from "@domain/ports/haptic";
 import Phaser from "phaser";
-import { COLORS, FPS, TIMINGS, VIEWPORT, px } from "../config";
+import { FPS, TIMINGS, VIEWPORT } from "../config";
 import { ParticleSystem, type ParticleTheme } from "../objects/particle";
 
-export type KillJuiceEvent = "normal" | "crit" | "combo_5+" | "boss_kill" | "wave_clear";
+export type KillJuiceEvent = "normal" | "crit" | "combo_5+" | "wave_clear";
 
 export class JuiceManager {
   private particles: ParticleSystem;
   private framesBelowThreshold = 0;
   private particleScale: 1 | 0.5 | 0.25 = 1;
   private flashOverlay: Phaser.GameObjects.Rectangle | null = null;
-  private climaxVignette: Phaser.GameObjects.Graphics | null = null;
   // freeze frame overlay는 매 호출마다 새 Rectangle을 생성. tween onComplete에서 destroy되지만
-  // boss kill 등으로 scene이 stop되는 경우 tween cancel 후 overlay가 잔존할 수 있음.
+  // scene이 stop되는 경우 tween cancel 후 overlay가 잔존할 수 있음.
   // 추적 후 destroy()에서 일괄 정리하여 다음 scene의 입력을 가리지 않도록 보장.
   private activeFreezeOverlays: Phaser.GameObjects.Rectangle[] = [];
 
@@ -27,7 +26,7 @@ export class JuiceManager {
   ) {
     this.particles = new ParticleSystem(scene);
     // scene shutdown 시 자동 cleanup. 안전망 — GameScene.shutdown에서 destroy()를 명시 호출하지만
-    // boss kill 후 delayedCall(900) 사이의 비정상 종료 등 엣지 케이스 방어.
+    // delayedCall 사이의 비정상 종료 등 엣지 케이스 방어.
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
   }
 
@@ -71,16 +70,6 @@ export class JuiceManager {
         this.emitParticles(x, y, TIMINGS.particleCount.normal, theme);
         this.audio.play("combo_5");
         this.haptic.vibrate([30, 20, 30]);
-        break;
-      }
-      case "boss_kill": {
-        this.applyHitStop(TIMINGS.hitStop.boss);
-        this.applyShake(TIMINGS.shake.boss, 300);
-        this.applyFlash(COLORS.comboGold, TIMINGS.flash.gold);
-        this.applyFreezeFrame(TIMINGS.freeze.boss);
-        this.emitParticles(x, y, TIMINGS.particleCount.boss, "usb");
-        this.audio.play("boss_kill");
-        this.haptic.vibrate([100, 40, 100]);
         break;
       }
       case "wave_clear": {
@@ -132,7 +121,7 @@ export class JuiceManager {
   }
 
   applyFreezeFrame(durationMs: number): void {
-    // 화면 흑백 vignette — 0.6초 (Boss kill) / 0.3초 (Wave clear).
+    // 화면 흑백 vignette — 0.3초 (Wave clear).
     const cam = this.scene.cameras.main;
     const overlay = this.scene.add.rectangle(
       cam.width / 2,
@@ -156,69 +145,12 @@ export class JuiceManager {
     });
   }
 
-  /** BOSS APPROACHING 무텍스트 cue — 4코너→중앙 수렴 펄스 ×2 + 약한 셰이크 + haptic. */
-  playBossApproaching(): void {
-    const cam = this.scene.cameras.main;
-    this.audio.play("boss_approaching");
-    this.haptic.vibrate([80, 40, 80]);
-    this.applyShake(TIMINGS.shake.normal, 200);
-    for (let pulse = 0; pulse < 2; pulse++) {
-      const ring = this.scene.add.graphics();
-      ring.setScrollFactor(0).setDepth(998);
-      ring.x = cam.width / 2;
-      ring.y = cam.height / 2;
-      ring.lineStyle(px(6), 0xff2d2d, 0.6);
-      ring.strokeRect(-cam.width / 2, -cam.height / 2, cam.width, cam.height);
-      this.scene.tweens.add({
-        targets: ring,
-        scaleX: 0.7,
-        scaleY: 0.7,
-        alpha: 0,
-        delay: pulse * 250,
-        duration: 350,
-        ease: "Quad.easeIn",
-        onComplete: () => ring.destroy(),
-      });
-    }
-  }
-
-  /** climax desaturate throb 비네트 on/off. idempotent. 채도 저하 인상(색 무관) — alpha throb. */
-  setBossClimax(active: boolean): void {
-    if (active) {
-      if (this.climaxVignette) return; // idempotent
-      const cam = this.scene.cameras.main;
-      const g = this.scene.add.graphics();
-      g.setScrollFactor(0).setDepth(997);
-      // 가장자리 어둑 비네트 (중앙은 투명) — 4변 근사.
-      const edge = px(60);
-      g.fillStyle(0x000000, 0.35);
-      g.fillRect(0, 0, cam.width, edge);
-      g.fillRect(0, cam.height - edge, cam.width, edge);
-      g.fillRect(0, 0, edge, cam.height);
-      g.fillRect(cam.width - edge, 0, edge, cam.height);
-      this.climaxVignette = g;
-      this.scene.tweens.add({
-        targets: g,
-        alpha: 0.6,
-        duration: 600,
-        yoyo: true,
-        repeat: -1,
-        ease: "Sine.easeInOut",
-      });
-    } else if (this.climaxVignette) {
-      this.scene.tweens.killTweensOf(this.climaxVignette);
-      this.climaxVignette.destroy();
-      this.climaxVignette = null;
-    }
-  }
-
   emitParticles(x: number, y: number, count: number, theme: ParticleTheme): void {
     const scaled = Math.max(2, Math.floor(count * this.particleScale));
     this.particles.emit(x, y, scaled, theme);
   }
 
   destroy(): void {
-    this.setBossClimax(false);
     this.particles.destroy();
     if (this.flashOverlay) {
       this.flashOverlay.destroy();
