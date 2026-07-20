@@ -20,11 +20,11 @@ export type ZombieSpec = {
 };
 
 const SPECS: Record<ZombieType, ZombieSpec> = {
-  [ZOMBIE_TYPE.INTERN]: { type: ZOMBIE_TYPE.INTERN, hp: 1, lifespanMs: 800, reward: 10 },
-  [ZOMBIE_TYPE.MIDDLE]: { type: ZOMBIE_TYPE.MIDDLE, hp: 2, lifespanMs: 1500, reward: 25 },
-  [ZOMBIE_TYPE.LEAD]: { type: ZOMBIE_TYPE.LEAD, hp: 3, lifespanMs: 2500, reward: 50 },
-  // CEO HP는 챕터별로 다르므로 base spec은 chapter 1 기준.
-  [ZOMBIE_TYPE.CEO]: { type: ZOMBIE_TYPE.CEO, hp: 10, lifespanMs: 5000, reward: 200 },
+  [ZOMBIE_TYPE.INTERN]: { type: ZOMBIE_TYPE.INTERN, hp: 1, lifespanMs: 2000, reward: 10 },
+  [ZOMBIE_TYPE.MIDDLE]: { type: ZOMBIE_TYPE.MIDDLE, hp: 1, lifespanMs: 2000, reward: 25 },
+  [ZOMBIE_TYPE.LEAD]: { type: ZOMBIE_TYPE.LEAD, hp: 2, lifespanMs: 2500, reward: 50 },
+  // CEO는 보스가 아니라 HP 높은 희귀 탱커(field). hp 5 = 5회 탭.
+  [ZOMBIE_TYPE.CEO]: { type: ZOMBIE_TYPE.CEO, hp: 5, lifespanMs: 3500, reward: 100 },
 };
 
 export function specOf(type: ZombieType): ZombieSpec {

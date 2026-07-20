@@ -200,7 +200,7 @@ describe("killZombie", () => {
     expect(_coinTierOf(meta)).toBe(0);
   });
 
-  it("[Boundary] CEO (보스급 일반 처치) reward 200 적용", () => {
+  it("[Boundary] CEO (탱커 좀비) reward 100 적용", () => {
     const random = makeRandom([0.99]);
     const out = killZombie(
       { random, clock },
@@ -214,7 +214,7 @@ describe("killZombie", () => {
         lastHitAtMs: 0,
       },
     );
-    expect(out.newScore.value()).toBe(200);
+    expect(out.newScore.value()).toBe(100);
   });
 
   it("[Error] killedAtMs가 NaN이면 RangeError", () => {
