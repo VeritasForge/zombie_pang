@@ -100,6 +100,11 @@ export class Spawner {
     return base + jitter;
   }
 
+  /**
+   * Band별 좀비 추첨 (1~5, 상급 비중 증가).
+   * band < 1 은 band1로, band > 5 는 band5로 클램프.
+   * CDF 누적 분포에서 random.next() ∈ [0, 1)를 사용해 ZombieType 추첨.
+   */
   spawnForBand(band: number, random: IRandom): ZombieType {
     const idx = Math.min(BAND_CDF.length - 1, Math.max(0, Math.floor(band) - 1));
     const cdf = BAND_CDF[idx];
@@ -130,6 +135,10 @@ export class Spawner {
     return lastEntry.type;
   }
 
+  /**
+   * Rate 기반 spawn 간격 (ms) = spawnRateMs ± SPAWN_JITTER_MS (최소 100ms).
+   * jitter는 random.next() 균등 분포 [0, 1)로 [-200, +200) 범위 결정.
+   */
   delayForRate(spawnRateMs: number, random: IRandom): number {
     if (!Number.isFinite(spawnRateMs) || spawnRateMs <= 0) {
       throw new RangeError(`delayForRate: spawnRateMs must be positive finite, got ${spawnRateMs}`);
