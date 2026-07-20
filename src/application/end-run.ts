@@ -1,13 +1,12 @@
 // EndRun — 런 종료 use case.
-// Bible §3: 5챕터 클리어(사직서 엔딩) / 도주 5 누적(조기 퇴근) / 사용자 early_exit.
+// Bible §3: 50층 완주(사직서 엔딩) / 도주 한도 누적(조기 퇴근) / 사용자 early_exit.
 //
 // 동작:
-//   1. saveStore에서 highScore / totalCoin / leaderboard 로드
+//   1. saveStore에서 highScore / leaderboard 로드
 //   2. highScore 갱신 (newScore > current → 갱신)
-//   3. totalCoin += earnedCoin
-//   4. leaderboard 갱신 (top 10, 점수 내림차순; 동점자는 최신 우선)
-//   5. 모두 saveStore에 저장
-//   6. durationMs = clock.now() - runStartedAt (saveStore에서 runStartedAt 로드)
+//   3. leaderboard 갱신 (top 10, 점수 내림차순; 동점자는 최신 우선)
+//   4. 모두 saveStore에 저장
+//   5. durationMs = clock.now() - runStartedAt (saveStore에서 runStartedAt 로드)
 
 import type { IClock } from "@domain/ports/clock";
 import type { ISaveStore } from "@domain/ports/save-store";
@@ -16,7 +15,6 @@ import { STORAGE_KEYS } from "./start-run";
 
 export const STORAGE_KEYS_RUN = {
   HIGH_SCORE: "zombie-pang:v1:high-score",
-  TOTAL_COIN: "zombie-pang:v1:total-coin",
   LEADERBOARD: "zombie-pang:v1:leaderboard",
 } as const;
 
@@ -31,16 +29,15 @@ export type EndRunDeps = {
 
 export type EndRunInput = {
   readonly runId: string;
-  readonly chaptersCleared: number;
+  readonly floorsReached: number;
   readonly finalScore: Score;
-  readonly earnedCoin: number;
   readonly reason: EndRunReason;
 };
 
 export type LeaderboardEntry = {
   readonly runId: string;
   readonly score: number;
-  readonly chaptersCleared: number;
+  readonly floorsReached: number;
   readonly reason: EndRunReason;
   readonly recordedAt: number;
 };
@@ -48,7 +45,6 @@ export type LeaderboardEntry = {
 export type EndRunOutput = {
   readonly durationMs: number;
   readonly highScoreUpdated: boolean;
-  readonly totalCoin: number;
   readonly leaderboardRank: number | null;
 };
 
@@ -68,14 +64,14 @@ function isLeaderboardEntry(value: unknown): value is LeaderboardEntry {
   const v = value as {
     runId?: unknown;
     score?: unknown;
-    chaptersCleared?: unknown;
+    floorsReached?: unknown;
     reason?: unknown;
     recordedAt?: unknown;
   };
   return (
     typeof v.runId === "string" &&
     typeof v.score === "number" &&
-    typeof v.chaptersCleared === "number" &&
+    typeof v.floorsReached === "number" &&
     typeof v.reason === "string" &&
     typeof v.recordedAt === "number"
   );
@@ -97,18 +93,9 @@ export function endRun(deps: EndRunDeps, input: EndRunInput): EndRunOutput {
   if (typeof input.runId !== "string" || input.runId.length === 0) {
     throw new RangeError(`endRun: runId must be non-empty string, got "${String(input.runId)}"`);
   }
-  if (!Number.isInteger(input.chaptersCleared) || input.chaptersCleared < 0) {
+  if (!Number.isInteger(input.floorsReached) || input.floorsReached < 0) {
     throw new RangeError(
-      `endRun: chaptersCleared must be non-negative integer, got ${input.chaptersCleared}`,
-    );
-  }
-  if (
-    !Number.isFinite(input.earnedCoin) ||
-    !Number.isInteger(input.earnedCoin) ||
-    input.earnedCoin < 0
-  ) {
-    throw new RangeError(
-      `endRun: earnedCoin must be non-negative integer, got ${input.earnedCoin}`,
+      `endRun: floorsReached must be non-negative integer, got ${input.floorsReached}`,
     );
   }
 
@@ -133,20 +120,12 @@ export function endRun(deps: EndRunDeps, input: EndRunInput): EndRunOutput {
     deps.saveStore.set(STORAGE_KEYS_RUN.HIGH_SCORE, newScoreValue);
   }
 
-  // total coin
-  const prevTotalCoin = deps.saveStore.get<number>(STORAGE_KEYS_RUN.TOTAL_COIN) ?? 0;
-  const totalCoin =
-    Number.isFinite(prevTotalCoin) && prevTotalCoin >= 0
-      ? prevTotalCoin + input.earnedCoin
-      : input.earnedCoin;
-  deps.saveStore.set(STORAGE_KEYS_RUN.TOTAL_COIN, totalCoin);
-
   // leaderboard — top 10, 동점자는 최신 우선 (큰 recordedAt이 앞)
   const board = loadLeaderboard(deps.saveStore);
   const newEntry: LeaderboardEntry = {
     runId: input.runId,
     score: newScoreValue,
-    chaptersCleared: input.chaptersCleared,
+    floorsReached: input.floorsReached,
     reason: input.reason,
     recordedAt: now,
   };
@@ -165,7 +144,6 @@ export function endRun(deps: EndRunDeps, input: EndRunInput): EndRunOutput {
   return {
     durationMs,
     highScoreUpdated,
-    totalCoin,
     leaderboardRank,
   };
 }

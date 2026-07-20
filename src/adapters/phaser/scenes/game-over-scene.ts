@@ -120,9 +120,8 @@ export class GameOverScene extends Phaser.Scene {
         { saveStore: container.ports.saveStore, clock: container.ports.clock },
         {
           runId,
-          chaptersCleared: data.floorsReached, // Task 5에서 floorsReached로 rename
+          floorsReached: data.floorsReached,
           finalScore: toScore(data.score),
-          earnedCoin: 0, // Task 5에서 제거
           reason: data.reason,
         },
       );
@@ -147,11 +146,7 @@ export class GameOverScene extends Phaser.Scene {
       return;
     }
     entries.forEach((entry, i) => {
-      const floors =
-        (entry as { floorsReached?: number; chaptersCleared?: number }).floorsReached ??
-        (entry as { chaptersCleared?: number }).chaptersCleared ??
-        0;
-      const text = `${i + 1}. ${Math.floor(entry.score).toString().padStart(6, "0")}  ${floors}F`;
+      const text = `${i + 1}. ${Math.floor(entry.score).toString().padStart(6, "0")}  ${entry.floorsReached}F`;
       const t = this.add.text(cx, y + px(28) + i * px(22), text, {
         fontFamily: FONT_FAMILY,
         fontSize: fontPx(12),

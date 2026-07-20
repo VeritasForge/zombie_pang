@@ -1,12 +1,12 @@
-import { MetaProgression } from "@domain/meta/progression";
 import type { IClock } from "@domain/ports/clock";
 import type { IRandom } from "@domain/ports/random";
+import { BASE_DROP_RATE } from "@domain/powerup/drop-policy";
 import { POWERUP_TYPE } from "@domain/powerup/powerup";
 import { Combo } from "@domain/score/combo";
 import { Score } from "@domain/score/score";
 import { ZOMBIE_TYPE, specOf } from "@domain/wave/zombie-type";
 import { describe, expect, it, vi } from "vitest";
-import { _coinTierOf, killZombie } from "./kill-zombie";
+import { killZombie } from "./kill-zombie";
 
 const clock: IClock = { now: () => 0, monotonic: () => 0 };
 
@@ -24,8 +24,8 @@ function makeRandom(values: readonly number[], pickIndex = 0): IRandom {
 }
 
 describe("killZombie", () => {
-  it("[Happy] intern 처치 → score += 10 × 1.0 × 1, combo 1", () => {
-    const random = makeRandom([0.99]); // drop 안 함
+  it("[Happy] intern 처치 → score += 10 × 1.0 × 1, combo 1, drop 없음", () => {
+    const random = makeRandom([0.99]); // 0.99 >= BASE_DROP_RATE(0.05) → drop 없음
     const out = killZombie(
       { random, clock },
       {
@@ -33,7 +33,6 @@ describe("killZombie", () => {
         isCritical: false,
         currentScore: Score.zero(),
         currentCombo: Combo.initial(),
-        meta: MetaProgression.empty(),
         killedAtMs: 1000,
         lastHitAtMs: 1000,
       },
@@ -42,39 +41,48 @@ describe("killZombie", () => {
     expect(out.newScore.value()).toBe(10);
     expect(out.newCombo.count()).toBe(1);
     expect(out.powerUpDropped).toBeNull();
-    expect(out.earnedCoin).toBe(10); // baseReward × 1 (no coin gain)
   });
 
-  it("[Happy] critical hit + combo ×1.5 적용", () => {
+  it("[Happy] critical hit + combo ×1.5 적용 (isCritical false 대비 2배)", () => {
     const random = makeRandom([0.99]);
-    // 5 hit 누적된 combo
     let combo = Combo.initial();
     for (let i = 0; i < 5; i += 1) combo = combo.hit();
-    // count=5 → tier x1.5
     expect(combo.tier()).toBe("x1_5");
 
-    const out = killZombie(
+    const normal = killZombie(
+      { random: makeRandom([0.99]), clock },
+      {
+        zombieType: ZOMBIE_TYPE.MIDDLE,
+        isCritical: false,
+        currentScore: Score.from(100),
+        currentCombo: combo,
+        killedAtMs: 1100,
+        lastHitAtMs: 1000,
+      },
+    );
+    const crit = killZombie(
       { random, clock },
       {
         zombieType: ZOMBIE_TYPE.MIDDLE,
         isCritical: true,
         currentScore: Score.from(100),
         currentCombo: combo,
-        meta: MetaProgression.empty(),
         killedAtMs: 1100,
         lastHitAtMs: 1000,
       },
     );
 
     // 6 hit 누적 → 여전히 x1.5
-    expect(out.newCombo.count()).toBe(6);
-    // reward 25 × 1.5 × 2 = 75
-    expect(out.newScore.value()).toBe(175);
+    expect(crit.newCombo.count()).toBe(6);
+    // reward 25 × 1.5 × 2 = 75 → score 100 + 75 = 175
+    expect(crit.newScore.value()).toBe(175);
+    // isCritical=false는 reward 25 × 1.5 × 1 = 37.5 → score 100 + 37.5 = 137.5
+    expect(normal.newScore.value()).toBe(137.5);
+    expect(crit.newScore.value()).toBeGreaterThan(normal.newScore.value());
   });
 
-  it("[Happy] meta coinGain 30% 적용 → coin 13", () => {
-    const random = makeRandom([0.99]);
-    const meta = MetaProgression.fromDeck(["COIN_T3"]);
+  it("[Happy] random.next < BASE_DROP_RATE → bomb drop", () => {
+    const random = makeRandom([0.001], 0); // 0.001 < 0.05, pick 첫번째(bomb)
     const out = killZombie(
       { random, clock },
       {
@@ -82,30 +90,27 @@ describe("killZombie", () => {
         isCritical: false,
         currentScore: Score.zero(),
         currentCombo: Combo.initial(),
-        meta,
-        killedAtMs: 0,
-        lastHitAtMs: 0,
-      },
-    );
-    // 10 × 1.3 = 13
-    expect(out.earnedCoin).toBe(13);
-  });
-
-  it("[Happy] random.next < dropRate → bomb drop", () => {
-    const random = makeRandom([0.001], 0); // 0.001 < 0.05, pick 첫번째 (bomb)
-    const out = killZombie(
-      { random, clock },
-      {
-        zombieType: ZOMBIE_TYPE.INTERN,
-        isCritical: false,
-        currentScore: Score.zero(),
-        currentCombo: Combo.initial(),
-        meta: MetaProgression.empty(),
         killedAtMs: 0,
         lastHitAtMs: 0,
       },
     );
     expect(out.powerUpDropped).toBe(POWERUP_TYPE.BOMB);
+  });
+
+  it("[Boundary] random.next === BASE_DROP_RATE 정확히 → drop 없음(>= 경계)", () => {
+    const random = makeRandom([BASE_DROP_RATE], 0);
+    const out = killZombie(
+      { random, clock },
+      {
+        zombieType: ZOMBIE_TYPE.INTERN,
+        isCritical: false,
+        currentScore: Score.zero(),
+        currentCombo: Combo.initial(),
+        killedAtMs: 0,
+        lastHitAtMs: 0,
+      },
+    );
+    expect(out.powerUpDropped).toBeNull();
   });
 
   it("[Boundary] combo decay 직후 (elapsed > 1500ms) → count=1 reset", () => {
@@ -121,7 +126,6 @@ describe("killZombie", () => {
         isCritical: false,
         currentScore: Score.zero(),
         currentCombo: combo,
-        meta: MetaProgression.empty(),
         killedAtMs: 3000,
         lastHitAtMs: 1000, // elapsed = 2000ms > 1500ms decay
       },
@@ -142,7 +146,6 @@ describe("killZombie", () => {
         isCritical: false,
         currentScore: Score.zero(),
         currentCombo: combo,
-        meta: MetaProgression.empty(),
         killedAtMs: 2500,
         lastHitAtMs: 1000, // elapsed = 1500ms 정확히
       },
@@ -160,7 +163,6 @@ describe("killZombie", () => {
         isCritical: false,
         currentScore: Score.zero(),
         currentCombo: Combo.initial(),
-        meta: MetaProgression.empty(),
         killedAtMs: 0,
         lastHitAtMs: 0,
       },
@@ -178,26 +180,11 @@ describe("killZombie", () => {
         isCritical: false,
         currentScore: Score.zero(),
         currentCombo: Combo.initial().hit().hit(),
-        meta: MetaProgression.empty(),
         killedAtMs: 500,
         lastHitAtMs: 500,
       },
     );
     expect(out.newCombo.count()).toBe(3);
-  });
-
-  it("[Boundary] coin tier 카운트 최대 3까지 clamp", () => {
-    const meta = MetaProgression.fromDeck(["COIN_T1", "COIN_T2", "COIN_T3"]);
-    expect(_coinTierOf(meta)).toBe(3);
-  });
-
-  it("[Boundary] coin tier 0장이면 0", () => {
-    expect(_coinTierOf(MetaProgression.empty())).toBe(0);
-  });
-
-  it("[Boundary] coin tier — non-coin 카드는 카운트 제외", () => {
-    const meta = MetaProgression.fromDeck(["DAMAGE_T1", "CRIT_T1"]);
-    expect(_coinTierOf(meta)).toBe(0);
   });
 
   it("[Boundary] CEO (탱커 좀비) reward 100 적용", () => {
@@ -209,7 +196,6 @@ describe("killZombie", () => {
         isCritical: false,
         currentScore: Score.zero(),
         currentCombo: Combo.initial(),
-        meta: MetaProgression.empty(),
         killedAtMs: 0,
         lastHitAtMs: 0,
       },
@@ -227,7 +213,6 @@ describe("killZombie", () => {
           isCritical: false,
           currentScore: Score.zero(),
           currentCombo: Combo.initial(),
-          meta: MetaProgression.empty(),
           killedAtMs: Number.NaN,
           lastHitAtMs: 0,
         },
@@ -245,7 +230,6 @@ describe("killZombie", () => {
           isCritical: false,
           currentScore: Score.zero(),
           currentCombo: Combo.initial(),
-          meta: MetaProgression.empty(),
           killedAtMs: 0,
           lastHitAtMs: Number.POSITIVE_INFINITY,
         },
@@ -263,7 +247,6 @@ describe("killZombie", () => {
           isCritical: false,
           currentScore: Score.zero(),
           currentCombo: Combo.initial(),
-          meta: MetaProgression.empty(),
           killedAtMs: 100,
           lastHitAtMs: 500,
         },

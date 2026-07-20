@@ -2,8 +2,7 @@ import { MetaProgression } from "@domain/meta/progression";
 import type { IRandom } from "@domain/ports/random";
 import type { ISaveStore } from "@domain/ports/save-store";
 import { describe, expect, it, vi } from "vitest";
-import { pickUpgrade } from "./pick-upgrade";
-import { STORAGE_KEYS } from "./start-run";
+import { META_DECK_STORAGE_KEY, pickUpgrade } from "./pick-upgrade";
 
 function makeSaveStore(): ISaveStore & { store: Map<string, unknown> } {
   const store = new Map<string, unknown>();
@@ -70,7 +69,7 @@ describe("pickUpgrade", () => {
 
     const newMeta = out.applyChoice(0);
     expect(newMeta.deck()).toEqual(["DAMAGE_T1"]);
-    expect(saveStore.get(STORAGE_KEYS.META_DECK)).toEqual(["DAMAGE_T1"]);
+    expect(saveStore.get(META_DECK_STORAGE_KEY)).toEqual(["DAMAGE_T1"]);
   });
 
   it("[Happy] applyChoice는 currentMeta를 변경하지 않고 새 객체 반환 (불변)", () => {

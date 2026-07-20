@@ -1,7 +1,6 @@
 // GameScene — 웨이브 클리커 메인 루프.
 // 한 run 동안 유지되며 floor를 내부에서 증가. 도메인 직접 import 없이 floor-plan/spawner/use-case 사용.
 
-import { MetaProgression } from "@domain/meta/progression"; // Task 5에서 제거되는 임시 shim
 import { FLOOR_MAX, bandOf, floorPlan } from "@domain/run/floor-plan";
 import { type Combo, Combo as ComboClass } from "@domain/score/combo";
 import { Score } from "@domain/score/score";
@@ -86,7 +85,6 @@ export class GameScene extends Phaser.Scene {
         {
           saveStore: container.ports.saveStore,
           clock: container.ports.clock,
-          random: container.ports.random,
         },
         { runId: this.runId },
       );
@@ -173,7 +171,6 @@ export class GameScene extends Phaser.Scene {
         isCritical,
         currentScore: this.score,
         currentCombo: this.combo,
-        meta: MetaProgression.empty(), // Task 5에서 제거
         killedAtMs: now,
         lastHitAtMs: this.lastHitAtMs === 0 ? now : this.lastHitAtMs,
       },

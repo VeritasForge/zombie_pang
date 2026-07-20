@@ -10,7 +10,10 @@ import { CardPool, unlockedCardIds } from "@domain/meta/card-pool";
 import type { MetaProgression } from "@domain/meta/progression";
 import type { IRandom } from "@domain/ports/random";
 import type { ISaveStore } from "@domain/ports/save-store";
-import { STORAGE_KEYS } from "./start-run";
+
+// NOTE: 이 use case 전체가 Task 6(보스/메타/서사 모듈 삭제)에서 물리적으로 삭제될 예정이라
+// Task 5의 start-run.ts STORAGE_KEYS 단순화(META_DECK 제거) 영향을 받지 않도록 키를 로컬로 보관한다.
+export const META_DECK_STORAGE_KEY = "zombie-pang:v1:meta-deck";
 
 export type PickUpgradeDeps = {
   readonly saveStore: ISaveStore;
@@ -67,7 +70,7 @@ export function pickUpgrade(deps: PickUpgradeDeps, input: PickUpgradeInput): Pic
     const chosenSpec = offered[chosenIndex];
     const newMeta = input.currentMeta.add(chosenSpec.id);
     const serializedDeck: readonly CardId[] = newMeta.deck();
-    deps.saveStore.set(STORAGE_KEYS.META_DECK, serializedDeck);
+    deps.saveStore.set(META_DECK_STORAGE_KEY, serializedDeck);
     return newMeta;
   };
 
