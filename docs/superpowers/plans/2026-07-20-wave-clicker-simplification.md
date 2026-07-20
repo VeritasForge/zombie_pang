@@ -32,6 +32,7 @@
 **신규**
 - `src/domain/run/floor-plan.ts` — 층 1~50 → `{quota, cap, spawnRateMs, escapeLimit, band}` 순수 함수. 난이도 커브 SSOT.
 - `src/domain/run/floor-plan.test.ts`, `src/domain/run/floor-plan.prop.test.ts`
+- `src/adapters/phaser/objects/powerup-pickup.ts` — 파워업 pickup 아이콘(탭 발동). (Task 7)
 - `docs/adr/0015-wave-clicker-simplification.md`
 
 **수정(리튠)**
@@ -43,6 +44,7 @@
 - `src/application/start-run.ts` — meta/streak/random 제거. (+test)
 - `src/application/kill-zombie.ts` — meta/coin 제거, 평평한 drop rate. (+test)
 - `src/application/end-run.ts` — `chaptersCleared`→`floorsReached`, coin 제거. (+test)
+- `src/application/apply-powerup.ts` — 메타 의존 제거(빙결/자석 지속 3000ms 고정, 자석 100px). (+test)
 - `src/infrastructure/container.ts` — `pickUpgrade` 제거.
 - `src/adapters/phaser/managers/juice-manager.ts` — boss climax/approaching 제거.
 - `tests/e2e/game-flow.spec.ts`, `tests/e2e/smoke.spec.ts` — 새 state 반영.
@@ -57,7 +59,7 @@
 
 **유지(변경 없음)**: `domain/score/*`, `domain/powerup/powerup.ts`+`drop-policy.ts`, `application/apply-powerup.ts`, `domain/wave/spawn-position.ts`, `adapters/phaser/objects/{zombie,particle}.ts`, PWA/audio/haptic/random/clock 인프라.
 
-> **파워업 관련 발견사항(handoff에서 사용자에게 보고):** 현재 파워업은 도메인/use-case만 존재하고 화면 pickup UI가 없어 실제로 발동되지 않는다(`killZombie`의 `powerUpDropped`를 scene이 무시). 본 플랜은 "단순화"이므로 파워업을 **도메인 코드로 유지(삭제 안 함)**하되 신규 pickup UI는 추가하지 않는다(YAGNI). 실제 발동을 원하면 별도 플랜으로 분리.
+> **파워업 배선(Task 7):** 파워업은 기존에 도메인/use-case만 있고 화면 배선이 없어 실제로 발동되지 않았다(`killZombie`의 `powerUpDropped`를 scene이 무시). 본 플랜은 **Task 7에서 pickup 오브젝트 + 발동 로직을 추가**해 실제 동작하도록 배선한다(폭탄=전체 처치 / 빙결=3초 정지 / 자석=3초 끌어당김+자동 처치, 타이머 효과 동시 ≤2). `apply-powerup.ts`의 메타 의존은 Task 5에서 제거한다.
 
 ---
 
@@ -1300,12 +1302,88 @@ it("[Error] floorsReached 음수면 RangeError", () => {
 
 `game-over-scene.ts` callEndRun을 `{ runId, floorsReached: data.floorsReached, finalScore, reason }`로 갱신(earnedCoin/chaptersCleared 제거). `renderLeaderboard`의 fallback을 `entry.floorsReached`로 단순화.
 
-- [ ] **Step 9: 전체 검증 + 커밋**
+- [ ] **Step 9: `apply-powerup` 메타 의존 제거(실패 테스트 먼저)** — 메타 삭제(Task 6) 전에 필수. `apply-powerup.test.ts`에서 meta 인자와 DURATION/SPECIAL_MAGNET 케이스를 제거하고 아래로:
+
+```ts
+import { POWERUP_TYPE } from "@domain/powerup/powerup";
+import { ZOMBIE_TYPE } from "@domain/wave/zombie-type";
+import { describe, expect, it } from "vitest";
+import { MAGNET_BASE_RANGE_PX, applyPowerUp } from "./apply-powerup";
+import type { ZombieInstance } from "./zombie-instance";
+
+const zombies: ZombieInstance[] = [
+  { id: "a", type: ZOMBIE_TYPE.INTERN, hp: 1 },
+  { id: "b", type: ZOMBIE_TYPE.LEAD, hp: 2 },
+];
+
+describe("applyPowerUp", () => {
+  it("[Happy] bomb은 화면 좀비 id 전부 반환", () => {
+    const out = applyPowerUp({ powerUp: POWERUP_TYPE.BOMB, zombiesOnScreen: zombies });
+    expect(out).toEqual({ kind: "bomb", killedZombieIds: ["a", "b"] });
+  });
+  it("[Happy] freeze는 3000ms 고정", () => {
+    expect(applyPowerUp({ powerUp: POWERUP_TYPE.FREEZE, zombiesOnScreen: [] })).toEqual({ kind: "freeze", durationMs: 3000 });
+  });
+  it("[Happy] magnet은 3000ms + 기본 range 100px", () => {
+    expect(applyPowerUp({ powerUp: POWERUP_TYPE.MAGNET, zombiesOnScreen: [] })).toEqual({ kind: "magnet", durationMs: 3000, rangePx: MAGNET_BASE_RANGE_PX });
+  });
+  it("[Boundary] bomb + 빈 화면은 빈 배열", () => {
+    expect(applyPowerUp({ powerUp: POWERUP_TYPE.BOMB, zombiesOnScreen: [] })).toEqual({ kind: "bomb", killedZombieIds: [] });
+  });
+  it("[Error] 알 수 없는 파워업은 RangeError", () => {
+    // @ts-expect-error 잘못된 입력
+    expect(() => applyPowerUp({ powerUp: "nuke", zombiesOnScreen: [] })).toThrow(RangeError);
+  });
+});
+```
+
+Run: `pnpm vitest run src/application/apply-powerup.test.ts` → FAIL.
+
+- [ ] **Step 10: `apply-powerup.ts` 단순화** — 메타 import/의존 제거:
+
+```ts
+// ApplyPowerUp — 파워업 활성화 use case (메타 의존 없음).
+//   - bomb: zombiesOnScreen 모두 처치(id 리스트 반환)
+//   - freeze: 3000ms 스폰/노화 정지
+//   - magnet: 3000ms, range 100px 자동 처치
+
+import { POWERUP_TYPE, type PowerUpType, specOfPowerUp } from "@domain/powerup/powerup";
+import type { ZombieInstance } from "./zombie-instance";
+
+export const MAGNET_BASE_RANGE_PX = 100;
+
+export type ApplyPowerUpInput = {
+  readonly powerUp: PowerUpType;
+  readonly zombiesOnScreen: readonly ZombieInstance[];
+};
+
+export type ApplyPowerUpOutput =
+  | { readonly kind: "bomb"; readonly killedZombieIds: readonly string[] }
+  | { readonly kind: "freeze"; readonly durationMs: number }
+  | { readonly kind: "magnet"; readonly durationMs: number; readonly rangePx: number };
+
+export function applyPowerUp(input: ApplyPowerUpInput): ApplyPowerUpOutput {
+  if (input.powerUp === POWERUP_TYPE.BOMB) {
+    return { kind: "bomb", killedZombieIds: input.zombiesOnScreen.map((z) => z.id) };
+  }
+  if (input.powerUp === POWERUP_TYPE.FREEZE) {
+    return { kind: "freeze", durationMs: specOfPowerUp(POWERUP_TYPE.FREEZE).durationMs };
+  }
+  if (input.powerUp === POWERUP_TYPE.MAGNET) {
+    return { kind: "magnet", durationMs: specOfPowerUp(POWERUP_TYPE.MAGNET).durationMs, rangePx: MAGNET_BASE_RANGE_PX };
+  }
+  throw new RangeError(`applyPowerUp: unknown power-up type "${String(input.powerUp)}"`);
+}
+```
+
+Run: `pnpm vitest run src/application/apply-powerup.test.ts` → PASS.
+
+- [ ] **Step 11: 전체 검증 + 커밋**
 
 ```bash
 pnpm typecheck && pnpm lint && pnpm test
-git add src/application/start-run.ts src/application/start-run.test.ts src/application/kill-zombie.ts src/application/kill-zombie.test.ts src/application/end-run.ts src/application/end-run.test.ts src/adapters/phaser/scenes/game-scene.ts src/adapters/phaser/scenes/game-over-scene.ts
-git commit -m "refactor(application): use-case에서 meta/coin/chapter 제거 — floor 기반으로 단순화"
+git add src/application/start-run.ts src/application/start-run.test.ts src/application/kill-zombie.ts src/application/kill-zombie.test.ts src/application/end-run.ts src/application/end-run.test.ts src/application/apply-powerup.ts src/application/apply-powerup.test.ts src/adapters/phaser/scenes/game-scene.ts src/adapters/phaser/scenes/game-over-scene.ts
+git commit -m "refactor(application): use-case에서 meta/coin/chapter 제거 + apply-powerup 메타 의존 제거"
 ```
 
 ---
@@ -1351,7 +1429,303 @@ git commit -m "chore: 보스·메타·서사 모듈 삭제 + 구 spawner/wave �
 
 ---
 
-## Task 7: E2E 시나리오 갱신
+## Task 7: 파워업 pickup + 발동 배선
+
+> Task 4의 `GameScene`에 파워업을 배선한다. `killZombie`가 반환하는 `powerUpDropped`(평평한 기본율, Task 5)를 소비해 처치 위치에 pickup을 만들고, 탭 시 `applyPowerUp`(Task 5, 메타 제거됨)으로 효과를 적용한다. Phaser adapter는 coverage 제외이므로 typecheck green + 수동/E2E 확인이 검증 기준.
+
+**Files:**
+- Create: `src/adapters/phaser/objects/powerup-pickup.ts`
+- Modify: `src/adapters/phaser/scenes/game-scene.ts`
+
+**Interfaces:**
+- Consumes: `applyPowerUp({powerUp, zombiesOnScreen})`(Task 5); `POWERUP_TYPE`, `PowerUpType`(domain/powerup/powerup); `ZombieInstance = {id, type, hp}`.
+- Produces: `window.__zp_state`에 `pickups[]`, `activeEffects[]` 필드 추가; `window.__zp_test__`에 `dropPickup(type)` 추가.
+
+- [ ] **Step 1: `powerup-pickup.ts` 오브젝트 작성**
+
+```ts
+// PowerupPickup — 처치 위치에 생성되는 탭 가능한 파워업 아이콘. 탭 시 GameScene이 발동.
+import type { PowerUpType } from "@domain/powerup/powerup";
+import Phaser from "phaser";
+import { COLORS, FONT_FAMILY, fontPx, px } from "../config";
+
+const PICKUP_RADIUS = px(24);
+const PICKUP_LIFESPAN_MS = 4500;
+
+const GLYPH: Record<PowerUpType, string> = { bomb: "B", freeze: "F", magnet: "M" };
+const TINT: Record<PowerUpType, number> = {
+  bomb: COLORS.neonPink,
+  freeze: 0x4dd0e1,
+  magnet: COLORS.comboGold,
+};
+
+export class PowerupPickup extends Phaser.GameObjects.Container {
+  public readonly powerUpType: PowerUpType;
+  public readonly spawnedAt: number;
+  static readonly LIFESPAN_MS = PICKUP_LIFESPAN_MS;
+
+  constructor(scene: Phaser.Scene, x: number, y: number, type: PowerUpType, spawnedAt: number) {
+    super(scene, x, y);
+    this.powerUpType = type;
+    this.spawnedAt = spawnedAt;
+
+    const g = scene.add.graphics();
+    g.fillStyle(TINT[type], 0.92);
+    g.fillCircle(0, 0, PICKUP_RADIUS);
+    g.lineStyle(px(2), COLORS.maskWhite, 1);
+    g.strokeCircle(0, 0, PICKUP_RADIUS);
+    const label = scene.add
+      .text(0, 0, GLYPH[type], {
+        fontFamily: FONT_FAMILY,
+        fontSize: fontPx(18),
+        color: "#1a1a1a",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    this.add([g, label]);
+
+    this.setSize(PICKUP_RADIUS * 2, PICKUP_RADIUS * 2);
+    this.setInteractive(new Phaser.Geom.Circle(0, 0, PICKUP_RADIUS), Phaser.Geom.Circle.Contains);
+    this.setDepth(50);
+    scene.add.existing(this);
+    scene.tweens.add({ targets: this, scale: { from: 0.85, to: 1.05 }, duration: 260, yoyo: true, repeat: -1 });
+  }
+}
+```
+
+- [ ] **Step 2: GameScene import/필드/상수 추가** — `game-scene.ts` 상단에 추가:
+
+```ts
+import { POWERUP_TYPE, type PowerUpType } from "@domain/powerup/powerup";
+import { PowerupPickup } from "../objects/powerup-pickup";
+```
+
+상수 추가(`CRIT_DAMAGE` 옆):
+
+```ts
+const MAX_CONCURRENT_EFFECTS = 2;
+```
+
+클래스 필드 추가:
+
+```ts
+  private pickups: PowerupPickup[] = [];
+  private activeEffects: { type: PowerUpType; expiresAt: number; rangePx?: number }[] = [];
+```
+
+`init()`에 리셋 2줄 추가: `this.pickups = []; this.activeEffects = [];`
+
+- [ ] **Step 3: 입력 핸들러 교체** — `create()`의 등록을 `this.input.on(Phaser.Input.Events.GAMEOBJECT_DOWN, this.onObjectDown, this);`로, `onZombieDown` 메서드를 아래 `onObjectDown`으로 교체:
+
+```ts
+  private onObjectDown(pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject): void {
+    if (this.isPaused) return;
+    if (obj instanceof PowerupPickup) {
+      this.activatePickup(obj);
+      return;
+    }
+    if (!(obj instanceof Zombie)) return;
+    const container = getContainer(this);
+    const localPoint = obj.getLocalPoint(pointer.x, pointer.y);
+    const isCritical = obj.isHeadHit(localPoint.x, localPoint.y);
+    const killed = obj.takeDamage(isCritical ? CRIT_DAMAGE : 1);
+    if (!killed) {
+      container.audioManager.play("hit");
+      return;
+    }
+    const now = this.time.now;
+    const result = container.useCases.killZombie(
+      { random: container.ports.random, clock: container.ports.clock },
+      {
+        zombieType: obj.zombieType,
+        isCritical,
+        currentScore: this.score,
+        currentCombo: this.combo,
+        killedAtMs: now,
+        lastHitAtMs: this.lastHitAtMs === 0 ? now : this.lastHitAtMs,
+      },
+    );
+    this.score = result.newScore;
+    this.combo = result.newCombo;
+    this.lastHitAtMs = now;
+    if (isCritical) this.juice.applyKillJuice("crit", obj.x, obj.y, themeForZombie(obj.zombieType));
+    else this.juice.applyKillJuice("normal", obj.x, obj.y, themeForZombie(obj.zombieType));
+    const c = this.combo.count();
+    if (c === 5 || c === 10 || c === 15) {
+      this.juice.applyKillJuice("combo_5+", obj.x, obj.y, themeForZombie(obj.zombieType));
+    }
+    const dropX = obj.x;
+    const dropY = obj.y;
+    this.removeZombie(obj.zombieId);
+    this.killedInFloor += 1;
+    if (result.powerUpDropped) this.spawnPickup(result.powerUpDropped, dropX, dropY);
+    this.checkQuota();
+  }
+```
+
+`shutdown()`의 off도 `this.input.off(Phaser.Input.Events.GAMEOBJECT_DOWN, this.onObjectDown, this);`로 교체하고 마지막에 `this.clearPickupsAndEffects();` 추가.
+
+- [ ] **Step 4: 파워업 메서드 추가**
+
+```ts
+  private spawnPickup(type: PowerUpType, x: number, y: number): void {
+    this.pickups.push(new PowerupPickup(this, x, y, type, this.time.now));
+  }
+
+  private removePickup(pickup: PowerupPickup): void {
+    const i = this.pickups.indexOf(pickup);
+    if (i >= 0) {
+      this.pickups.splice(i, 1);
+      pickup.destroy();
+    }
+  }
+
+  private clearPickupsAndEffects(): void {
+    for (const p of [...this.pickups]) p.destroy();
+    this.pickups = [];
+    this.activeEffects = [];
+  }
+
+  private hasEffect(type: PowerUpType): boolean {
+    return this.activeEffects.some((e) => e.type === type);
+  }
+
+  private activatePickup(pickup: PowerupPickup): void {
+    const type = pickup.powerUpType;
+    // 타이머 효과(빙결/자석) 동시 2개 한도. 폭탄은 즉발이라 한도 무관.
+    if (type !== POWERUP_TYPE.BOMB && this.activeEffects.length >= MAX_CONCURRENT_EFFECTS) {
+      return;
+    }
+    const container = getContainer(this);
+    this.removePickup(pickup);
+    container.audioManager.play("powerup_pickup");
+    const out = container.useCases.applyPowerUp({
+      powerUp: type,
+      zombiesOnScreen: this.zombies.map((z) => ({ id: z.id, type: z.type, hp: z.obj.hp })),
+    });
+    if (out.kind === "bomb") {
+      for (const id of out.killedZombieIds) this.autoKill(id);
+      this.checkQuota();
+    } else if (out.kind === "freeze") {
+      this.activeEffects.push({ type: POWERUP_TYPE.FREEZE, expiresAt: this.time.now + out.durationMs });
+    } else {
+      this.activeEffects.push({ type: POWERUP_TYPE.MAGNET, expiresAt: this.time.now + out.durationMs, rangePx: out.rangePx });
+    }
+    this.publishHud();
+  }
+
+  private autoKill(id: string): void {
+    const entry = this.zombies.find((z) => z.id === id);
+    if (!entry) return;
+    const spec = specOf(entry.type);
+    this.score = this.score.add(spec.reward * this.combo.multiplier());
+    this.juice.applyKillJuice("normal", entry.obj.x, entry.obj.y, themeForZombie(entry.type));
+    this.removeZombie(id);
+    this.killedInFloor += 1;
+  }
+
+  private checkQuota(): void {
+    this.publishHud();
+    if (this.killedInFloor >= this.plan().quota) this.onFloorCleared();
+  }
+```
+
+- [ ] **Step 5: `update()` 교체(빙결·자석·pickup 수명 포함)**
+
+```ts
+  update(): void {
+    if (this.isPaused) return;
+    this.juice.tickFps();
+
+    const before = this.activeEffects.length;
+    this.activeEffects = this.activeEffects.filter((e) => this.time.now < e.expiresAt);
+    if (this.activeEffects.length !== before) this.publishHud();
+
+    const frozen = this.hasEffect(POWERUP_TYPE.FREEZE);
+
+    if (!frozen && this.time.now >= this.nextSpawnAtMs && this.canSpawn()) {
+      this.spawnZombie();
+      this.scheduleNextSpawn();
+    }
+
+    for (const p of [...this.pickups]) {
+      if (this.time.now - p.spawnedAt > PowerupPickup.LIFESPAN_MS) this.removePickup(p);
+    }
+
+    const magnet = this.activeEffects.find((e) => e.type === POWERUP_TYPE.MAGNET);
+    if (magnet) {
+      const cx = VIEWPORT.width / 2;
+      const cy = VIEWPORT.height / 2;
+      const range = px(magnet.rangePx ?? 100);
+      const captured: string[] = [];
+      for (const z of this.zombies) {
+        const dx = cx - z.obj.x;
+        const dy = cy - z.obj.y;
+        if (Math.hypot(dx, dy) <= range) captured.push(z.id);
+        else z.obj.setPosition(z.obj.x + dx * 0.08, z.obj.y + dy * 0.08);
+      }
+      for (const id of captured) this.autoKill(id);
+      if (captured.length > 0) this.checkQuota();
+    }
+
+    if (!frozen) {
+      const now = this.time.now;
+      const toRemove: string[] = [];
+      for (const z of this.zombies) {
+        if (now - z.spawnedAt > z.lifespanMs) toRemove.push(z.id);
+      }
+      for (const id of toRemove) {
+        this.fled += 1;
+        this.combo = this.combo.miss();
+        this.removeZombie(id);
+      }
+      if (toRemove.length > 0) {
+        this.publishHud();
+        if (this.fled >= this.plan().escapeLimit) {
+          this.onFloorFail();
+          return;
+        }
+        this.scheduleNextSpawn();
+      }
+    }
+
+    this.publishE2eState();
+  }
+```
+
+- [ ] **Step 6: `onFloorCleared` + 상태 publish + 테스트 훅 갱신**
+
+`onFloorCleared()`에서 `this.killedInFloor = 0;` 다음 줄에 `this.clearPickupsAndEffects();` 추가.
+
+`publishE2eState()` snapshot에 두 필드 추가:
+
+```ts
+      pickups: this.pickups.map((p) => ({ type: p.powerUpType, x: p.x, y: p.y })),
+      activeEffects: this.activeEffects.map((e) => e.type),
+```
+
+`ZpTestHooks` 타입에 `readonly dropPickup: (type: string) => void;` 추가하고, `exposeTestHooks()`의 훅 객체에:
+
+```ts
+      dropPickup: (type: string): void => {
+        if (type === "bomb" || type === "freeze" || type === "magnet") {
+          this.spawnPickup(type, VIEWPORT.width / 2, VIEWPORT.height / 2);
+        }
+      },
+```
+
+- [ ] **Step 7: 검증 + 수동 확인 + 커밋**
+
+```bash
+pnpm typecheck && pnpm lint && pnpm test
+# pnpm dev — 좀비 반복 처치 → pickup 등장 → 탭 → 폭탄/빙결/자석 동작 눈으로 확인(선택)
+git add src/adapters/phaser/objects/powerup-pickup.ts src/adapters/phaser/scenes/game-scene.ts
+git commit -m "feat(adapters): 파워업 pickup 배선 — 폭탄/빙결/자석 실제 발동 (동시 타이머 효과 ≤2)"
+```
+
+---
+
+## Task 8: E2E 시나리오 갱신
 
 **Files:**
 - Delete: `tests/e2e/boss-wave.spec.ts`
@@ -1359,12 +1733,13 @@ git commit -m "chore: 보스·메타·서사 모듈 삭제 + 구 spawner/wave �
 
 - [ ] **Step 1: boss E2E 삭제** — `rm tests/e2e/boss-wave.spec.ts`.
 
-- [ ] **Step 2: `game-flow.spec.ts` state 타입 갱신** — `ZpState`를 새 snapshot(`floor, quota, killed, score, fled, fledLimit, comboCount, isPaused, zombies, sceneActive, activeScene`)으로 교체. `chapter`/`wave` 참조 전부 `floor`로.
+- [ ] **Step 2: `game-flow.spec.ts` state 타입 갱신** — `ZpState`를 새 snapshot으로 교체: `floor, quota, killed, score, fled, fledLimit, comboCount, isPaused, zombies, pickups, activeEffects, sceneActive, activeScene`. `chapter`/`wave` 참조 전부 `floor`로.
 
-- [ ] **Step 3: 3 시나리오 작성/갱신**
+- [ ] **Step 3: 4 시나리오 작성/갱신**
   1. **층 상승**: PUNCH IN → GameScene 진입 → 좀비 좌표를 polling해 quota만큼 탭 → `__zp_state.floor`가 2 이상으로 증가 확인.
   2. **층 실패(도주 한도)**: `window.__zp_test__.forceZombieTimeout()`을 반복 호출해 `fled >= fledLimit` 유도 → `__zp_scene === "GameOverScene"` 확인.
   3. **정시 퇴근**: HUD "정시 퇴근" zone 탭 → `__zp_scene === "GameOverScene"` + "정시 퇴근" 텍스트 확인.
+  4. **파워업 발동(폭탄)**: `window.__zp_test__.dropPickup("bomb")` 호출 → `__zp_state.pickups`에 bomb 1개 확인 → pickup 좌표(중앙) 탭 → 화면 좀비 수 감소(활성 좀비 처치) 확인. 이어서 `dropPickup("freeze")` → 탭 → `__zp_state.activeEffects`에 `"freeze"` 포함 확인.
 
 ```ts
 // 예시(시나리오 2 골자)
@@ -1393,7 +1768,7 @@ git commit -m "test(e2e): 보스 시나리오 제거, 층 상승/도주 실패/�
 
 ---
 
-## Task 8: ADR + Bible + CLAUDE.md 방향 전환 반영
+## Task 9: ADR + Bible + CLAUDE.md 방향 전환 반영
 
 **Files:**
 - Create: `docs/adr/0015-wave-clicker-simplification.md`
@@ -1420,13 +1795,14 @@ git commit -m "docs(adr): ADR-0015 웨이브 클리커 전환 + Bible/CLAUDE.md 
 ## Self-Review (작성 후 점검 결과)
 
 **1. Spec coverage** — spec 각 절 대응:
-- §2 결정표(범위/클리어/실패/파워업/CEO/테마/코인/챕터밴드/정시퇴근/접근) → Task 1~5, 8 전부 대응. 파워업은 "도메인 유지, UI 미추가"로 명시(handoff 플래그).
+- §2 결정표(범위/클리어/실패/파워업/CEO/테마/코인/챕터밴드/정시퇴근/접근) → Task 1~7 전부 대응. 파워업은 use-case 단순화(Task 5) + pickup 발동 배선(Task 7)로 실제 동작.
 - §3 코어 루프 → Task 4 GameScene.
 - §4 난이도 커브 → Task 1 floor-plan (수치 일치: floor1 quota8/cap3/rate1000/esc5, floor50 quota82/cap12/rate300/esc3).
+- §4.1 파워업 발동 → Task 5(apply-powerup 메타 제거) + Task 7(pickup 오브젝트 + 폭탄/빙결/자석 + 동시 ≤2).
 - §5 제거/유지 → Task 6 삭제, 유지 목록 명시.
 - §6 도메인/앱 변경 → Task 1~6.
-- §7 테스트 계획 → 각 Task RED에 [Happy]/[Boundary]/[Error] + Task 1/3 property + Task 7 E2E.
-- §8 ADR/Bible/CLAUDE → Task 8.
+- §7 테스트 계획 → 각 Task RED에 [Happy]/[Boundary]/[Error] + Task 1/3 property + Task 8 E2E(파워업 시나리오 포함).
+- §8 ADR/Bible/CLAUDE → Task 9.
 - §9 완료조건/금지/고려/제약 → Global Constraints + Task 6 grep + Task 8 build.
 
 **2. Placeholder scan** — code step은 모두 실제 코드 포함. Task 5 end-run은 diff 요지 + 정확한 필드명 명시(전체 파일 재현 대신 지점 지정 — 기존 파일 구조 보존 목적, 변경 지점 완전 열거). Task 7 E2E는 시나리오 골자 코드 제공.
