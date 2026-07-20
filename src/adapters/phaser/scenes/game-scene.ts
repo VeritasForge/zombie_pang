@@ -209,6 +209,7 @@ export class GameScene extends Phaser.Scene {
     this.juice.applyKillJuice("wave_clear", VIEWPORT.width / 2, VIEWPORT.height / 2, "paper");
     this.floor += 1;
     this.killedInFloor = 0;
+    this.fled = 0;
     this.applyBackground();
     this.scheduleNextSpawn();
     this.publishHud();

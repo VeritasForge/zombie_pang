@@ -1,17 +1,15 @@
 // GameOverScene — run 종료 결과. reason: clear / fled_limit / early_exit.
 
-import { type LeaderboardEntry, STORAGE_KEYS_RUN } from "@application/end-run";
+import { type EndRunReason, type LeaderboardEntry, STORAGE_KEYS_RUN } from "@application/end-run";
 import { Score } from "@domain/score/score";
 import { getContainer } from "@infrastructure/container";
 import Phaser from "phaser";
 import { COLORS, COLOR_HEX, FONT_FAMILY, SCENE_KEYS, VIEWPORT, fontPx, px } from "../config";
 
-type EndReason = "clear" | "early_exit" | "fled_limit";
-
 export type GameOverInitData = {
   readonly score: Score | number;
   readonly floorsReached: number;
-  readonly reason: EndReason;
+  readonly reason: EndRunReason;
   readonly runId?: string;
   readonly runStartedAt?: number;
 };
