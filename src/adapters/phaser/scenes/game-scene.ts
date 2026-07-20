@@ -296,6 +296,7 @@ export class GameScene extends Phaser.Scene {
 
   update(): void {
     if (this.isPaused) return;
+    const floorAtTickStart = this.floor;
     this.juice.tickFps();
 
     const before = this.activeEffects.length;
@@ -328,6 +329,11 @@ export class GameScene extends Phaser.Scene {
       for (const id of captured) this.autoKill(id);
       if (captured.length > 0) this.checkQuota();
     }
+
+    // 자석 처치가 층 전환(onFloorCleared) 또는 run 종료(endRunWith)를 유발했을 수 있다.
+    // 같은 tick에서 aging/도주 로직이 이어지면 이미 바뀐 층의 fled를 오염시키거나
+    // floor 50에서 "clear" 전환과 경합하는 "fled_limit" 종료가 중복 발생할 수 있어 조기 반환.
+    if (this.isPaused || this.floor !== floorAtTickStart) return;
 
     if (!frozen) {
       const now = this.time.now;
@@ -400,7 +406,7 @@ export class GameScene extends Phaser.Scene {
       comboCount: this.combo.count(),
       isPaused: this.isPaused,
       zombies: this.zombies.map((z) => ({ id: z.id, type: z.type, x: z.obj.x, y: z.obj.y })),
-      pickups: this.pickups.map((p) => ({ type: p.powerUpType, x: p.x, y: p.y })),
+      pickups: this.pickups.map((pk) => ({ type: pk.powerUpType, x: pk.x, y: pk.y })),
       activeEffects: this.activeEffects.map((e) => e.type),
       sceneActive: this.scene.isActive(),
       activeScene: SCENE_KEYS.game,
