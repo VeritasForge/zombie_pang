@@ -13,11 +13,11 @@
 - **무엇**: 50층 좀비 사옥에서 야근을 끝내고 옥상까지 올라가 퇴근하는 **B급 코믹 호러 PWA 캐주얼 액션**. 한 손 30~60초 마이크로세션.
 - **한 줄 컨셉**: *"당신은 마지막 사원이다. 50층 좀비 사옥에서 야근을 끝내고 옥상까지 올라가 퇴근하라."*
 - **장르**: PWA 캐주얼 액션 (수직 진행 tap-to-defeat) — 한국+글로벌 모바일 18~35세
-- **현재 단계**: **MVP 개발 (Phase C)** — 5챕터 × 10층 = 50층 완주, 카드 15장, 좀비 4종, Power-up 3종, 오프라인 전 기능
+- **현재 단계**: **MVP 개발 (Phase C)** — 5챕터(난이도 밴드) × 10층 = 50층 완주, 좀비 4종(CEO는 탱커 필드 좀비), Power-up 3종(발동 배선 완료), 오프라인 전 기능. 카드 15장·출근 도장은 웨이브 클리커 단순화(ADR-0015)로 제거됨.
 - **루트**: `/Users/cjynim/lab/zombie_pang`
-- **핵심 차별점**:
-  1. 좀비를 *죽이는* 게임이 아니라 *퇴근시키는* 게임
-  2. 매 챕터 종료 시 *정시 퇴근* 버튼이 *계속하기*와 동등 가중치
+- **핵심 차별점** (ADR-0015 갱신, 2026-07-20 — 웨이브 클리커 단순화로 보스전·메타 카드·서사 연출 제거):
+  1. 좀비를 탭해서 처치하며 층을 오르는 웨이브 클리커 — 층별 처치 목표(quota) 클리어 / 도주 한도 초과 시 실패
+  2. 언제든 *정시 퇴근* 버튼으로 현재 점수 종료 가능, 계속 진행과 동등 가중치
   3. Notification·광고 0, FOMO 트리거 0 (Ethics-aware game design)
   4. PWA 단일 배포, 5초 로딩, 오프라인 전 기능
 
@@ -234,19 +234,20 @@ import { CONFIG } from './config'
 | `infrastructure/` | ≥ 80% | ≥ 70% | ≥ 80% | ≥ 80% | SW precache 검증, graceful fallback |
 | `shared/` | **100%** | **100%** | **100%** | **100%** | Branded types, helpers |
 
-### 6.3 Property-based Invariant 7개 (seed=42, numRuns=1000)
+### 6.3 Property-based Invariant 6개 (seed=42, numRuns=1000) — ADR-0015 갱신
+
+보스 HP 곡선(#3.84 등), 챕터 카드 3장 균등 추첨, Daily Streak 곡선 invariant는 대상 도메인(`domain/boss/*`, `domain/meta/*`)이 웨이브 클리커 단순화로 삭제되어 제거되었다. 상세: `docs/adr/0015-wave-clicker-simplification.md`.
 
 | # | Invariant | 도메인 |
 |---|-----------|--------|
 | 1 | `score ≥ 0` 항상 성립 | Score |
 | 2 | Combo tier는 단조 증가하다 decay/miss에만 리셋 | Combo |
-| 3 | 임의의 wave N (1~10)에 대해 `spawnRate(N) ∈ [300, 1000]` ms | Wave |
-| 4 | 처치 + 도주 = 스폰 (수지) | Spawner |
-| 5 | 챕터 카드 3장 추첨: 중복 없음, 모두 풀에서 추출 | Meta |
-| 6 | `streak ∈ [0,7]`, `coinMultiplier = 1 + 0.2 × streak` | DailyStreak |
-| 7 | 동일 seed → 동일 wave/spawn 시퀀스 (결정론) | SeededRandom |
+| 3 | 임의의 floor F (1~50)에 대해 `floorPlan(F).quota`는 단조 증가 | FloorPlan |
+| 4 | 임의의 floor F (1~50)에 대해 `floorPlan(F).spawnRateMs ∈ [300, 1000]` ms | FloorPlan |
+| 5 | 임의의 floor F (1~50)에 대해 `floorPlan(F).cap ∈ [1, CAP_MAX]`(clamp) | FloorPlan |
+| 6 | 동일 seed → 동일 spawn 시퀀스 (결정론) | SeededRandom |
 
-추가 invariant: Power-up 동시 활성 ≤ 2 / Boss HP 곡선 (1.0/1.5/2.25/3.10/3.84).
+추가 invariant: Power-up 동시 활성 ≤ 2(`MAX_CONCURRENT_EFFECTS`) / `dropOnKill` 결과는 항상 `{bomb, freeze, magnet, null}` 중 하나.
 
 ### 6.4 Mutation Score 임계
 
@@ -273,7 +274,7 @@ Application ≥ 70%
 
 ## 7. Game Domain
 
-상세: `docs/domain/glossary.md` (용어 30+개 정의 + 타입 시그니처).
+상세: `docs/domain/glossary.md` (용어 30+개 정의 + 타입 시그니처). **ADR-0015(2026-07-20) 갱신**: 보스전·메타 카드·출근 도장·서사 연출 제거. 배경·상세: `docs/adr/0015-wave-clicker-simplification.md`.
 
 ### 7.1 좀비 4종 (Phaser Graphics only, 외부 아트 0)
 
@@ -282,58 +283,49 @@ Application ≥ 70%
 | 신입 / Intern | 갓 감염 | 빠름 | 1 | 흰 (`#F0EAD6`) | 1F |
 | 과장 / Middle | 책임감 짓눌림 | 중간 | 1 | 회색 (`#7A7A7A`) | 3F |
 | 팀장 / Lead | 회의 미종결 | 느림 | 2 | 진회색 (`#3A3A3A`) | 6F |
-| CEO / Founder Zero | 보스 | 보스 | 5 | 검정 (`#0A0A0A`) | 10F, 20F, 30F, 40F, 50F |
+| CEO / Founder Zero | 탱커 필드 좀비(희귀, 보스 아님) | 매우 느림 | 5 | 검정 (`#0A0A0A`) | 11F부터(밴드 2), 등장 확률 1%→10% |
 
 ### 7.2 Wave / Floor / Chapter
 
-- **1 Chapter = 10 Wave = 10 Floor = 60초 envelope** (상한 68초)
-- **5 Chapter = 50 Floor** = MVP 풀 게임
-- spawn rate: 1000ms (시작) → 300ms (wave 10)
-- zombie lifespan: 2000ms (시작) → 1200ms (끝)
-- 도주 누적 5 = 챕터 fail (조기 퇴근 모달, *"오늘은 여기까지 해도 충분합니다."*)
+- **5 챕터(난이도 밴드) × 10층 = 50층** = MVP 풀 게임. 챕터는 서사 없는 난이도 구간(`floorPlan().band`)일 뿐이다.
+- 층 클리어: `floorPlan(F).quota`만큼 처치 → 다음 층. 층 실패: 도주 누적이 `floorPlan(F).escapeLimit` 도달 → run 종료(조기 퇴근 톤, *"오늘은 여기까지 해도 충분합니다."*)
+- spawn rate: 1000ms(1층) → 300ms(50층), 선형 감소
+- 동시 최대 좀비 수(cap): 3(1층) → 12(50층 상한)
+- 도주 한도(escapeLimit): 밴드 1~2(1~20층) 5, 밴드 3~4(21~40층) 4, 밴드 5(41~50층) 3
+- 층별 60초 envelope·보스 climax는 제거됨 — 층 진행은 시간이 아닌 quota/도주 카운트로만 결정된다.
 
 ### 7.3 Combo / Crit
 
 - combo tier: ×1 → ×1.5 (5kill) → ×2 (10kill) → ×3 (15kill)
-- combo decay: 1500ms (default) / 2000ms (늘어지는 회의 카드 보유 시)
-- crit: 머리 tap → 2× (사직서 한 방 카드 보유 시 2.5×)
+- combo decay: 1500ms 고정(`DEFAULT_DECAY_MS`) — 카드 보너스로 인한 연장 없음(메타 카드 제거)
+- crit: 머리 tap → ×2 고정(`CRITICAL_MULTIPLIER`) — 카드 보너스로 인한 ×2.5 없음(메타 카드 제거)
 
 ### 7.4 Power-up 3종
 
-| Power-up | 효과 | 지속 | drop rate (T0 / T3) |
-|----------|------|------|---------------------|
-| 폭탄 (Bomb) | 화면 전체 좀비 즉시 처치 | 즉발 | 1.67% / 2.17% |
-| 빙결 (Freeze) | 모든 좀비 3초 정지 | 3초 | 1.67% / 2.17% |
-| 자석 (Magnet) | 좀비 끌어당김 + 자동 처치 | 3초 | 1.67% / 2.17% |
-| **합계** | — | — | **5% / 6.5%** (max) |
+| Power-up | 효과 | 지속 | drop rate |
+|----------|------|------|-----------|
+| 폭탄 (Bomb) | 화면 전체 좀비 즉시 처치 | 즉발 | 평평한 기본율 5%(`BASE_DROP_RATE`) |
+| 빙결 (Freeze) | 좀비 스폰·노화 3초 정지 | 3초 | 평평한 기본율 5% |
+| 자석 (Magnet) | 100px 반경 좀비 자동 처치 | 3초 | 평평한 기본율 5% |
 
-- 동시 활성 한도 **2개**
-- 보스 처치 시 30% 확정 drop (3종 균등)
-- 곱셈 누적만 허용, 덧셈 누적 금지 (슬롯머신화 방지, ADR-0008 Resolved)
+- 처치 시 3종 중 하나를 균등 추첨해 드롭 여부 결정. 메타/코인 tier 결합 없음(코인 제거로 무의미).
+- 처치 위치에 탭 가능한 pickup이 생성되고, 일정 시간 미획득 시 소멸. pickup 탭 → `applyPowerUp` 호출로 실제 발동(기존에는 drop만 계산되고 화면 배선이 없었음 — 이번에 실제로 연결됨).
+- 동시 활성 한도 **2개**(`MAX_CONCURRENT_EFFECTS`, 빙결·자석 등 지속형 효과에만 적용) — 폭탄은 즉발이라 한도 무관.
+- 보스 확정 drop(구 30%)은 보스전 제거로 더 이상 발생하지 않는다.
 
-### 7.5 Meta Card 15장 (Base 12 + Special 3)
+### 7.5 메타 카드 / 출근 도장 — 제거됨
 
-- Base 12: Damage / Crit% / Duration / Coin Gain × 각 Tier 1/2/3
-- Special 3: 자기장 ID카드 (자석 +20px) / 늘어지는 회의 (combo decay +0.5s) / 사직서 한 방 (crit ×2.5)
-- 추첨: **결정론 균등** 3장 fan-out → 1장 선택 (가챠 금지)
-- Unlock: Tier 2 (챕터 2 클리어), Tier 3 (챕터 4 클리어), Special (누적 coin 1000/3000/10000)
+카드 15장(Base 12 + Special 3), Tier/coin 기반 unlock, Daily Streak(출근 도장 +20%/일, 7일 상한)는 웨이브 클리커 단순화로 전부 삭제되었다. 코인(coin) 재화도 unlock 게이트가 사라져 사용처가 없어 함께 제거되었다.
 
-### 7.6 Daily Streak (출근 도장)
-
-- +20% coin / 일 (선형 누적)
-- 7일 상한 (+140%)
-- **페널티 0** — 끊겨도 도장은 흐려질 뿐 사라지지 않음
-- 8일째 자동 휴식 모달 ("연차 사용")
-
-### 7.7 결정론 vs 가변 (Layer 1 / Layer 2)
+### 7.6 결정론 vs 가변 (Layer 1 / Layer 2)
 
 | 영역 | Layer 1 (결정론) | Layer 2 (가변) |
 |------|-----------------|----------------|
 | 좀비 처치 / 콤보 / Crit | ✅ | — |
-| Power-up drop rate | ✅ (Coin Tier 곱셈만) | — |
-| 챕터 카드 3장 추첨 | ✅ (균등) | — |
-| 사옥 인테리어 재건 순서 | — | ✅ |
-| 골드 폭증 ×5 (1~3% 확률) | — | ✅ |
+| Power-up drop rate (평평한 기본율) | ✅ | — |
+| 층 진행 (quota 클리어 / 도주 실패) | ✅ | — |
+
+- 챕터 카드 3장 추첨, 사옥 인테리어 재건 순서, 골드 폭증 등 기존 Layer 2 사례는 해당 시스템 자체가 삭제되어 더 이상 존재하지 않는다.
 
 ---
 
@@ -365,17 +357,16 @@ Application ≥ 70%
 | 한 /rl에서 2개 이상 Task 처리 | 1콜 = 1Task | ralph-loop 상태 충돌 + 컨텍스트 폭주 |
 | PWA manifest/SW를 마지막에 부가 | C-1 스켈레톤부터 vite-plugin-pwa 골격 | 캐싱 누락 시 오프라인 깨짐 |
 | 외부 이미지/사운드 자산 다운로드 | Phaser Graphics 도형 + Web Audio 합성음 | 자산 < 3MB + 라이선스 리스크 0화 |
-| 좀비 4종 외 추가 종 | MVP: 신입/과장/팀장/CEO 4종 고정 | Bible §2 + MVP 범위 |
-| 카드 15장 외 추가 | Base 12 + Special 3 = 15장 고정 | Bible §4 + MVP 범위 |
+| 좀비 4종 외 추가 종 | MVP: 신입/과장/팀장/CEO 4종 고정 (CEO는 탱커 필드 좀비, 보스 아님) | Bible §2 + MVP 범위 |
+| 보스전(rage/climax/미니언/페이즈) 재도입 | CEO는 hp 5 탱커 필드 좀비로만 유지 | ADR-0015 (웨이브 클리커 단순화) |
+| 메타 카드·성장·출근 도장·코인 재화 재도입 | 층 오르기 + 점수/콤보/파워업만 유지 | ADR-0015 (웨이브 클리커 단순화) |
 | 외부 광고 SDK | MVP는 광고 0개 (ADR-0001 Open) | Bible §7 안티패턴 #7 |
 | `Notification.requestPermission` 호출 | **영구 비요청** (v1/v2/v3 전부) | Bible §6 + Ethics §7 안티패턴 #2 |
-| 카운트다운 압박 텍스트 ("남은 5초!") | 보스 위협만으로 압박 표현 | Bible §3 + Ethics §7 안티패턴 #6 |
-| 카드 가챠 정량 표기 ("최대 15%") | "Tier 3에서 drop 빈도 증가" 정성 표현 | Bible §4 + Ethics §7 안티패턴 #9 |
-| Streak 끊김 페널티 | 도장은 흐려질 뿐 사라지지 않음 | Bible §4 + Ethics §7 안티패턴 #1 |
+| 카운트다운 압박 텍스트 ("남은 5초!") | HUD 숫자(quota/도주 카운트)만으로 긴장 표현 | Bible §3 + Ethics §7 안티패턴 #6 |
 | `git push` (사용자 명시 요청 전) | 로컬 커밋만 | 환경 안전 원칙 |
 | Wake Lock API 사용 | 60초 세션이므로 불필요 | Bible §6 |
 | Energy/Stamina 시스템 | 재접속 강제 = 야근의 정의 | Bible §7 안티패턴 #3 |
-| 카드 가챠 풀 (확률 가변) | 결정론 균등 추첨 | Bible §7 안티패턴 #4 |
+| 확률 가변 가챠 시스템 신규 도입 | 결정론적 고정 확률만 허용(현재 Power-up 평평한 5%) | Bible §7 안티패턴 #4 |
 | Snapshot 테스트 남용 | behavior 기반 expect | Vitest 안티패턴 |
 | Cypress 신규 채택 | Playwright | E2E 일관성 |
 | ESLint + Prettier 추가 | Biome 단일 | 빌드 속도 + 일관성 |
