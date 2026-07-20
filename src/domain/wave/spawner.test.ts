@@ -149,3 +149,51 @@ describe("Spawner determinism", () => {
     expect(seq1).toEqual(seq2);
   });
 });
+
+function fixedRandom(value: number): IRandom {
+  return {
+    next: () => value,
+    pick: (arr) => arr[0] as never,
+    nextInt: (max) => Math.floor(value * max),
+  };
+}
+
+describe("Spawner.spawnForBand", () => {
+  it("[Happy] band1 낮은 난수는 intern", () => {
+    expect(new Spawner().spawnForBand(1, fixedRandom(0.1))).toBe(ZOMBIE_TYPE.INTERN);
+  });
+  it("[Happy] band5 높은 난수는 CEO", () => {
+    expect(new Spawner().spawnForBand(5, fixedRandom(0.99))).toBe(ZOMBIE_TYPE.CEO);
+  });
+  it("[Boundary] band1은 CEO가 나오지 않는다(난수 최댓값 근처도 lead 이하)", () => {
+    expect(new Spawner().spawnForBand(1, fixedRandom(0.999))).not.toBe(ZOMBIE_TYPE.CEO);
+  });
+  it("[Boundary] band<1 은 band1로, band>5 는 band5로 클램프", () => {
+    expect(new Spawner().spawnForBand(0, fixedRandom(0.1))).toBe(ZOMBIE_TYPE.INTERN);
+    expect(new Spawner().spawnForBand(9, fixedRandom(0.99))).toBe(ZOMBIE_TYPE.CEO);
+  });
+  it("[Error] 난수가 [0,1) 밖이면 RangeError", () => {
+    expect(() => new Spawner().spawnForBand(1, fixedRandom(1))).toThrow(RangeError);
+  });
+});
+
+describe("Spawner.delayForRate", () => {
+  it("[Happy] 난수 0.5는 정확히 base(jitter 0)", () => {
+    expect(new Spawner().delayForRate(500, fixedRandom(0.5))).toBe(500);
+  });
+  it("[Boundary] 난수 0은 base - 200", () => {
+    expect(new Spawner().delayForRate(500, fixedRandom(0))).toBe(300);
+  });
+  it("[Boundary] 낮은 base에서도 최소 100ms 보장", () => {
+    expect(new Spawner().delayForRate(120, fixedRandom(0))).toBeGreaterThanOrEqual(100);
+  });
+  it("[Error] base가 비유한/음수면 RangeError", () => {
+    expect(() => new Spawner().delayForRate(-1, fixedRandom(0.5))).toThrow(RangeError);
+  });
+  it("[Error] random.next() >= 1은 RangeError", () => {
+    expect(() => new Spawner().delayForRate(500, fixedRandom(1.0))).toThrow(RangeError);
+  });
+  it("[Error] random.next() 음수는 RangeError", () => {
+    expect(() => new Spawner().delayForRate(500, fixedRandom(-0.1))).toThrow(RangeError);
+  });
+});

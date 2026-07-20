@@ -18,6 +18,46 @@ const NORMAL_WAVE_CDF: ReadonlyArray<{ threshold: number; type: ZombieType }> = 
   { threshold: 1.0, type: ZOMBIE_TYPE.CEO },
 ];
 
+// band 1~5별 좀비 분포(누적 CDF). 저층 신입 위주 → 고층 상급 비중 증가.
+export const BAND_CDF: ReadonlyArray<ReadonlyArray<{ threshold: number; type: ZombieType }>> = [
+  // band1
+  [
+    { threshold: 0.85, type: ZOMBIE_TYPE.INTERN },
+    { threshold: 0.98, type: ZOMBIE_TYPE.MIDDLE },
+    { threshold: 1.0, type: ZOMBIE_TYPE.LEAD },
+  ],
+  // band2
+  [
+    { threshold: 0.7, type: ZOMBIE_TYPE.INTERN },
+    { threshold: 0.92, type: ZOMBIE_TYPE.MIDDLE },
+    { threshold: 0.99, type: ZOMBIE_TYPE.LEAD },
+    { threshold: 1.0, type: ZOMBIE_TYPE.CEO },
+  ],
+  // band3
+  [
+    { threshold: 0.55, type: ZOMBIE_TYPE.INTERN },
+    { threshold: 0.83, type: ZOMBIE_TYPE.MIDDLE },
+    { threshold: 0.96, type: ZOMBIE_TYPE.LEAD },
+    { threshold: 1.0, type: ZOMBIE_TYPE.CEO },
+  ],
+  // band4
+  [
+    { threshold: 0.45, type: ZOMBIE_TYPE.INTERN },
+    { threshold: 0.75, type: ZOMBIE_TYPE.MIDDLE },
+    { threshold: 0.93, type: ZOMBIE_TYPE.LEAD },
+    { threshold: 1.0, type: ZOMBIE_TYPE.CEO },
+  ],
+  // band5
+  [
+    { threshold: 0.38, type: ZOMBIE_TYPE.INTERN },
+    { threshold: 0.68, type: ZOMBIE_TYPE.MIDDLE },
+    { threshold: 0.9, type: ZOMBIE_TYPE.LEAD },
+    { threshold: 1.0, type: ZOMBIE_TYPE.CEO },
+  ],
+];
+
+const MIN_SPAWN_DELAY_MS = 100;
+
 export class Spawner {
   /**
    * Spawn 1마리. 보스 wave는 CEO 확정, 일반 wave는 분포에서 추첨.
@@ -58,5 +98,47 @@ export class Spawner {
     const jitter = (r * 2 - 1) * SPAWN_JITTER_MS;
     // base는 [300, 1000], jitter는 [-200, +200), 합산 최솟값 100ms로 항상 양수.
     return base + jitter;
+  }
+
+  spawnForBand(band: number, random: IRandom): ZombieType {
+    const idx = Math.min(BAND_CDF.length - 1, Math.max(0, Math.floor(band) - 1));
+    const cdf = BAND_CDF[idx];
+    /* c8 ignore next 3 -- idx는 항상 유효 범위 */
+    if (cdf === undefined) {
+      throw new RangeError(`BAND_CDF[${idx}] undefined`);
+    }
+    const r = random.next();
+    if (!Number.isFinite(r) || r < 0 || r >= 1) {
+      throw new RangeError(`IRandom.next must return [0, 1), got ${r}`);
+    }
+    const last = cdf.length - 1;
+    for (let i = 0; i < last; i += 1) {
+      const entry = cdf[i];
+      /* c8 ignore next 3 -- last 범위 내 항상 존재 */
+      if (entry === undefined) {
+        throw new RangeError(`BAND_CDF[${idx}][${i}] undefined`);
+      }
+      if (r < entry.threshold) {
+        return entry.type;
+      }
+    }
+    const lastEntry = cdf[last];
+    /* c8 ignore next 3 */
+    if (lastEntry === undefined) {
+      throw new RangeError(`BAND_CDF[${idx}] empty`);
+    }
+    return lastEntry.type;
+  }
+
+  delayForRate(spawnRateMs: number, random: IRandom): number {
+    if (!Number.isFinite(spawnRateMs) || spawnRateMs <= 0) {
+      throw new RangeError(`delayForRate: spawnRateMs must be positive finite, got ${spawnRateMs}`);
+    }
+    const r = random.next();
+    if (!Number.isFinite(r) || r < 0 || r >= 1) {
+      throw new RangeError(`IRandom.next must return [0, 1), got ${r}`);
+    }
+    const jitter = (r * 2 - 1) * SPAWN_JITTER_MS;
+    return Math.max(MIN_SPAWN_DELAY_MS, spawnRateMs + jitter);
   }
 }
