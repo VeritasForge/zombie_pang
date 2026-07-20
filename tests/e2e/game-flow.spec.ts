@@ -44,6 +44,8 @@ type ZpWindow = Window & {
   __zp_state?: ZpState;
   // biome-ignore lint/style/useNamingConvention: window snapshot key matches game-scene publishE2eState.
   __zp_scene?: string;
+  // biome-ignore lint/style/useNamingConvention: window snapshot key matches game-over-scene create().
+  __zp_gameover_reason?: string;
   // biome-ignore lint/style/useNamingConvention: e2e test hook 네임스페이스 (game-scene exposeTestHooks).
   __zp_test__?: ZpTestHooks;
 };
@@ -232,6 +234,8 @@ test.describe("좀비팡 게임 flow", () => {
     await page.waitForFunction(() => (window as ZpWindow).__zp_scene === "GameOverScene", {
       timeout: 5_000,
     });
+    // HUD exitBtnZone 경로는 항상 reason "early_exit"로 전이해야 함 — fled_limit/clear와 구분.
+    expect(await page.evaluate(() => (window as ZpWindow).__zp_gameover_reason)).toBe("early_exit");
     expect(fatalErrors).toEqual([]);
   });
 
@@ -262,7 +266,11 @@ test.describe("좀비팡 게임 flow", () => {
     )) as number;
     expect(zombiesBefore).toBeGreaterThan(0);
 
-    // 폭탄 드랍 → pickups에 등록 확인 → 탭 → 화면 좀비 수 감소.
+    // 폭탄 드랍 → pickups에 등록 확인 → 탭.
+    // 폭탄은 탭 시점의 화면 전체 좀비를 예외 없이 전부 처치하므로 (apply-powerup.ts kind:"bomb"),
+    // "zombies.length가 줄었다"처럼 느슨한 검증은 안 된다 — 화면 중앙 근처 좀비가 폭탄이 아니라
+    // 일반 1탭으로 죽어도(1마리 감소) 우연히 같은 조건을 통과해 false-pass할 수 있기 때문.
+    // 결정론적으로 "전멸 + pickup 소모"를 함께 확인한다.
     await page.evaluate(() => (window as ZpWindow).__zp_test__?.dropPickup("bomb"));
     await page.waitForFunction(
       () => (window as ZpWindow).__zp_state?.pickups.some((p) => p.type === "bomb") ?? false,
@@ -270,11 +278,12 @@ test.describe("좀비팡 게임 flow", () => {
     );
     await page.mouse.click(centerPoint.x, centerPoint.y);
     await page.waitForFunction(
-      (before) => {
+      () => {
         const s = (window as ZpWindow).__zp_state;
-        return s !== undefined && s.zombies.length < before;
+        return (
+          s !== undefined && s.zombies.length === 0 && !s.pickups.some((p) => p.type === "bomb")
+        );
       },
-      zombiesBefore,
       { timeout: 3_000 },
     );
 

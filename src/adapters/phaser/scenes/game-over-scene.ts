@@ -33,6 +33,9 @@ export class GameOverScene extends Phaser.Scene {
     if (typeof window !== "undefined") {
       // biome-ignore lint/style/useNamingConvention: e2e polling entry point.
       (window as unknown as { __zp_scene: string }).__zp_scene = SCENE_KEYS.gameOver;
+      // biome-ignore lint/style/useNamingConvention: e2e polling entry point.
+      (window as unknown as { __zp_gameover_reason: string }).__zp_gameover_reason =
+        this.initData?.reason ?? "";
     }
     const data = this.initData;
     if (!data) {
