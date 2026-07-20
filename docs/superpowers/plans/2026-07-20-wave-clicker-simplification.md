@@ -1414,11 +1414,14 @@ rm src/adapters/phaser/objects/boss-hud.ts src/adapters/phaser/objects/upgrade-c
 
 - [ ] **Step 4: juice-manager 보스 연출 제거** — `src/adapters/phaser/managers/juice-manager.ts`에서 `setBossClimax`, `playBossApproaching`, `applyFreezeFrame`(보스 전용이면), `applyKillJuice`의 `"boss_kill"`/`"wave_clear"` 중 보스 관련 case 정리. **주의**: `"wave_clear"`는 새 scene의 `onFloorCleared`가 사용하므로 유지. `"boss_kill"` case와 boss climax 관련 필드/메서드만 제거.
 
-- [ ] **Step 5: 잔재 참조 grep 검증** — 아래가 모두 0건이어야 함(테스트 파일·주석 제외):
+- [ ] **Step 4b: main-menu 출근도장(streak) UI 제거** — T5에서 발견: `start-run`이 더 이상 streak를 저장하지 않아 main-menu의 "STREAK n/7" 표시가 항상 0/7로 고정된다. `src/adapters/phaser/scenes/main-menu-scene.ts`를 Read한 뒤, streak 표시(텍스트/도장 UI)와 관련 로직, 그리고 T5에서 임시로 넣은 로컬 `STREAK_STORAGE_KEY` 상수 + `ISaveStore` streak 읽기를 제거한다. (pick-upgrade의 임시 `META_DECK_STORAGE_KEY`는 파일 자체가 이 Task에서 삭제되므로 함께 사라진다.) 다른 메뉴 요소(PUNCH IN 등)는 유지.
+
+- [ ] **Step 5: 잔재 참조 grep 검증** — 아래가 모두 0건이어야 함(주석 제외; 삭제 후에는 테스트 파일도 함께 사라져 0건):
 
 ```bash
 grep -rn "domain/boss\|domain/meta\|building-progress\|spawn-boss-wave\|tick-boss-position\|pick-upgrade\|upgrade-card\|boss-hud\|MetaProgression\|DailyStreak\|isBossWave\|coinGain" src --include="*.ts"
 ```
+`src/application`+`src/adapters/phaser/scenes` 범위에서도 `MetaProgression\|coinGain\|@domain/meta` 0건(T5 잔여 pick-upgrade 삭제로 해소).
 
 - [ ] **Step 6: 전체 검증 + 커밋**
 
