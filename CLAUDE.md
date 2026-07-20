@@ -84,7 +84,7 @@ pnpm size                 # dist/ 사이즈 확인 (< 1.5MB gzip 목표)
 | test:prop | seed=42, numRuns=1000, invariant 0건 실패 |
 | test:mutation | domain ≥80%, application ≥70% |
 | build | dist/ 생성, gzip < 1.5MB |
-| test:e2e | 3개 시나리오 통과 (30초 플레이 / wave10 보스 / 메타 카드) |
+| test:e2e | 4개 시나리오 통과 (층 상승 / 도주 실패(도주 한도) / 정시 퇴근 / 파워업 발동) — ADR-0015 갱신 |
 | lighthouse | PWA ≥90, Performance ≥80, Installable true |
 
 ---
@@ -105,28 +105,30 @@ pnpm size                 # dist/ 사이즈 확인 (< 1.5MB gzip 목표)
                │ Port 구현체 주입
 ┌──────────────▼───────────────────────────────────────────────┐
 │ adapters/         (Phaser UI / persistence)                  │
-│   phaser/scenes/{boot, preload, main-menu, game, hud, end}   │
-│   phaser/objects/{zombie, particle, upgrade-card, boss}      │
+│   phaser/scenes/{boot, preload, main-menu, game, hud,        │
+│                   game-over}                                 │
+│   phaser/objects/{zombie, particle, powerup-pickup}          │
 │   phaser/managers/{audio, juice}                             │
 │   persistence/local-storage-save-store.ts                    │
 └──────────────┬───────────────────────────────────────────────┘
                │ application use case 호출
 ┌──────────────▼───────────────────────────────────────────────┐
 │ application/      (use case 함수)                            │
-│   start-run / kill-zombie / apply-powerup                    │
-│   pick-upgrade / end-chapter / end-run                       │
+│   start-run / kill-zombie / apply-powerup / end-run          │
 └──────────────┬───────────────────────────────────────────────┘
                │ domain 순수 규칙 실행
 ┌──────────────▼───────────────────────────────────────────────┐
 │ domain/           (POJO + Port interface, 외부 의존성 0)     │
-│   score/ combo / wave / spawner / zombie-type                │
-│   powerup/ powerup-drop / powerup-stack                      │
-│   meta/ card / card-draw / unlock / daily-streak             │
-│   run/ chapter / floor / boss                                │
+│   score/ combo                                                │
+│   wave/ spawner / zombie-type / spawn-position                │
+│   powerup/ powerup / drop-policy                              │
+│   run/ floor-plan                                              │
 │   ports/ random / clock / save-store / audio / haptic        │
 └──────────────────────────────────────────────────────────────┘
 의존성 방향:  domain ←─ application ←─ adapters/infrastructure
 ```
+
+**참고 (ADR-0015 갱신)**: `meta/`(card/card-draw/unlock/daily-streak), `domain/boss/*`, `phaser/objects/{upgrade-card, boss}`, `application/{pick-upgrade, end-chapter}`은 웨이브 클리커 단순화로 삭제되었다. 상세: `docs/adr/0015-wave-clicker-simplification.md`.
 
 **의존성 규칙 (DIP)**: `domain`은 어떤 것도 import하지 않습니다. Port는 `domain/ports/`에 interface로 선언하고, 구현은 `infrastructure/`에서 합니다. Phaser/DOM/localStorage/Web Audio는 모두 Adapter 뒤에 숨깁니다.
 
@@ -217,11 +219,11 @@ import { CONFIG } from './config'
 
 모든 RED phase는 `[Happy]/[Boundary]/[Error]` 각 ≥1개 포함. PR/Task 종료 시 `grep -c` 검증.
 
-| 카테고리 | 좀비팡 예시 |
+| 카테고리 | 좀비팡 예시 (ADR-0015 갱신) |
 |---------|------------|
-| `[Happy]` | combo 5kill 후 ×1.5 승급 / Power-up 정상 발동 / wave 10 도달 시 CEO 보스 등장 |
-| `[Boundary]` | combo decay 정확히 1500ms / spawn rate 하한 300ms / 좀비 도주 4→5 fail 경계 / streak 7→8일 (상한+휴식 모달) / coin 0/1/9999 / Power-up 동시 활성 1→2→3 (한도) / freeze-frame 0/599/600/601ms |
-| `[Error]` | localStorage quota 초과 → graceful degrade / Vibration API 미지원 → no-op / RNG seed 미주입 → throw / 잘못된 power-up 타입 / negative score 시도 / 도주 누적이 음수 |
+| `[Happy]` | combo 5kill 후 ×1.5 승급 / Power-up pickup 탭 시 정상 발동 / floor quota 도달 시 층 클리어 |
+| `[Boundary]` | combo decay 정확히 1500ms / floor 1·50 경계 / quota 하한·상한 / escapeLimit 밴드 전환(20→21층, 40→41층) / cap 포화(12) / spawnRate 하한 300ms(floor 50) / Power-up 동시 활성 1→2→3 (한도 2) / freeze·magnet 지속 3000ms 경계 |
+| `[Error]` | localStorage quota 초과 → graceful degrade / Vibration API 미지원 → no-op / RNG seed 미주입 → throw / 잘못된 power-up 타입 / negative score 시도 / floor < 1 또는 > 50 → throw |
 
 ### 6.2 커버리지 매트릭스 (per-path threshold)
 

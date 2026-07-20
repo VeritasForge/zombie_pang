@@ -64,7 +64,7 @@ run 시작 (floor 1)
 
 ### 실제 수치 (코드 SSOT: `src/domain/run/floor-plan.ts`)
 
-- `quota(F) = round(8 + (F − 1) × 1.5)` — 단조 증가 (floor 1: 8마리 ~ floor 50: 81마리).
+- `quota(F) = round(8 + (F − 1) × 1.5)` — 단조 증가 (floor 1: 8마리 ~ floor 50: 82마리).
 - `cap(F)` — 동시 화면 상한, `CAP_MAX = 12`로 clamp.
 - `spawnRateMs(F)` — 1000ms(floor 1) → 300ms(floor 50) 선형 감소.
 - `escapeLimit(F)` — band 1~2(1~20층) 5, band 3~4(21~40층) 4, band 5(41~50층) 3.

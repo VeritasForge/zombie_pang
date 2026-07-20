@@ -1,8 +1,13 @@
 # ADR-0007: 보스 거동 및 페이즈 모델
 
+> **[2026-07-20]** `Status: Superseded by ADR-0015`. 본 ADR이 다루는 보스 도메인(`domain/boss/*`,
+> 보스 wave 분기, 보스 HUD)은 웨이브 클리커 단순화로 전부 삭제되었다. 본 문서는 역사적 기록으로
+> 보존되며, 현행 CEO(탱커 필드 좀비) 설계는 `docs/adr/0015-wave-clicker-simplification.md`,
+> `docs/game-design/bible.md` §2를 참조한다.
+
 ## Status
 
-Accepted (2026-05-24)
+~~Accepted (2026-05-24)~~ → **Superseded by ADR-0015** (2026-07-20)
 
 ## Context
 
