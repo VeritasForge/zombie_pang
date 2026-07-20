@@ -1,50 +1,21 @@
-// GameOverScene — End-of-chapter card pick / End-of-run leaderboard.
-// Bible §3 success 3택: 다음 챕터 / 카드 자세히 / 정시 퇴근 — 모두 동등 가중치.
+// GameOverScene — run 종료 결과. reason: clear / fled_limit / early_exit.
 
-import { type EndRunReason, type LeaderboardEntry, STORAGE_KEYS_RUN } from "@application/end-run";
-import type { DailyStreak } from "@domain/meta/daily-streak";
-import { MetaProgression } from "@domain/meta/progression";
-import { TOTAL_FLOORS, litFloorsFor } from "@domain/run/building-progress";
+import { type LeaderboardEntry, STORAGE_KEYS_RUN } from "@application/end-run";
 import { Score } from "@domain/score/score";
 import { getContainer } from "@infrastructure/container";
 import Phaser from "phaser";
-import {
-  COLORS,
-  COLOR_HEX,
-  FONT_FAMILY,
-  INTERIOR_PALETTES,
-  SCENE_KEYS,
-  VIEWPORT,
-  fontPx,
-  px,
-} from "../config";
-import { UpgradeCard } from "../objects/upgrade-card";
+import { COLORS, COLOR_HEX, FONT_FAMILY, SCENE_KEYS, VIEWPORT, fontPx, px } from "../config";
 
-type EndKind = "clear" | "chapter_end" | "early_exit" | "fled_limit";
+type EndReason = "clear" | "early_exit" | "fled_limit";
 
 export type GameOverInitData = {
-  readonly chapter: number;
-  // Score 인스턴스 또는 number — HudScene의 정시 퇴근 분기에서는 number만 보유하므로 둘 다 허용.
   readonly score: Score | number;
-  readonly earnedCoin: number;
-  readonly meta?: MetaProgression;
-  readonly streak?: DailyStreak | null;
+  readonly floorsReached: number;
+  readonly reason: EndReason;
   readonly runId?: string;
   readonly runStartedAt?: number;
-  readonly reason: EndKind;
-  readonly bestReachedChapter: number;
 };
 
-// 챕터 → 부서명 (Bible §2 5막). drawBuilding 전환 컷인 텍스트.
-const DEPT_NAMES: Record<number, string> = {
-  1: "신입부서",
-  2: "영업본부",
-  3: "R&D",
-  4: "임원실",
-  5: "CEO 집무실",
-};
-
-/** init.score가 number이면 Score VO로 lift. Score 인스턴스면 그대로 반환. */
 function toScore(s: Score | number): Score {
   return typeof s === "number" ? Score.from(s) : s;
 }
@@ -65,233 +36,85 @@ export class GameOverScene extends Phaser.Scene {
       // biome-ignore lint/style/useNamingConvention: e2e polling entry point.
       (window as unknown as { __zp_scene: string }).__zp_scene = SCENE_KEYS.gameOver;
     }
-
     const data = this.initData;
     if (!data) {
       this.scene.start(SCENE_KEYS.mainMenu);
       return;
     }
     this.cameras.main.setBackgroundColor(COLOR_HEX.bgDark);
-
-    if (data.reason === "chapter_end") {
-      this.renderChapterEnd(data);
-    } else {
-      this.renderRunEnd(data);
-    }
-  }
-
-  private renderChapterEnd(data: GameOverInitData): void {
-    const container = getContainer(this);
-    const cx = VIEWPORT.width / 2;
-
-    // 사옥 빌딩 배경 레이어 — 누적 점등 + 줌아웃 (카드 fan-out 전, depth 0).
-    this.drawBuilding(data.bestReachedChapter);
-
-    const title = this.add.text(cx, px(80), `Chapter ${data.chapter} Clear`, {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(28),
-      color: COLOR_HEX.neonPink,
-      fontStyle: "bold",
-    });
-    title.setOrigin(0.5, 0.5);
-
-    const subtitle = this.add.text(cx, px(120), "PUNCH OUT! 17:30", {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(14),
-      color: COLOR_HEX.limeGreen,
-    });
-    subtitle.setOrigin(0.5, 0.5);
-
-    const scoreText = this.add.text(cx, px(156), `SCORE ${toScore(data.score).toString()}`, {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(16),
-      color: COLOR_HEX.maskWhite,
-    });
-    scoreText.setOrigin(0.5, 0.5);
-
-    // 챕터별 누적 coin (highest cleared chapter 갱신용)
-    const totalCoinSoFar =
-      (container.ports.saveStore.get<number>(STORAGE_KEYS_RUN.TOTAL_COIN) ?? 0) + data.earnedCoin;
-
-    const currentMeta = data.meta ?? MetaProgression.empty();
-    const pickResult = container.useCases.pickUpgrade(
-      { saveStore: container.ports.saveStore, random: container.ports.random },
-      { chapter: data.chapter, totalCoin: totalCoinSoFar, currentMeta },
-    );
-
-    const cardY = px(320);
-    const cardGap = px(110);
-    const startX = cx - cardGap;
-
-    const onCardClick = (idx: 0 | 1 | 2): void => {
-      container.audioManager.play("powerup_pickup");
-      const newMeta = pickResult.applyChoice(idx);
-      // 다음 챕터로 진행. GameOverScene 자신도 stop 해야 input 충돌 방지.
-      this.scene.start(SCENE_KEYS.game, {
-        chapter: data.chapter + 1,
-        carryMeta: newMeta,
-        carryStreak: data.streak,
-        carryRunId: data.runId,
-        carryStartedAt: data.runStartedAt,
-        carryEarnedCoin: data.earnedCoin,
-      });
-      this.scene.stop();
-    };
-
-    new UpgradeCard(this, startX, cardY, pickResult.offered[0], 0, onCardClick);
-    new UpgradeCard(this, startX + cardGap, cardY, pickResult.offered[1], 1, onCardClick);
-    new UpgradeCard(this, startX + cardGap * 2, cardY, pickResult.offered[2], 2, onCardClick);
-
-    // 정시 퇴근 옵션 — 부모 viewport(dpr 적용) 기준으로 하단 정렬.
-    const btnY1 = Math.min(px(520), VIEWPORT.height - px(200));
-    const btnY2 = Math.min(px(580), VIEWPORT.height - px(140));
-    this.makeButton(cx, btnY1, px(200), px(48), "정시 퇴근", COLORS.neonPink, () => {
-      this.endRunWith(data, "early_exit");
-    });
-    this.makeButton(cx, btnY2, px(200), px(40), "메인 메뉴", COLORS.maskWhite, () => {
-      this.endRunWith(data, "early_exit");
-    });
-  }
-
-  /** 사옥 빌딩 미니어처 — 배경 레이어. 누적 점등 + 줌아웃. depth 0(카드는 위). */
-  private drawBuilding(chaptersCleared: number): void {
-    const cx = VIEWPORT.width / 2;
-    const bw = px(120);
-    const bh = px(500);
-    const top = px(60);
-    const floorH = bh / TOTAL_FLOORS;
-    const lit = litFloorsFor(chaptersCleared);
-    const clamped = Math.min(5, Math.max(1, Math.floor(chaptersCleared)));
-    const palette = INTERIOR_PALETTES[clamped] ?? INTERIOR_PALETTES[1];
-    const accent = palette?.accent ?? COLORS.limeGreen;
-
-    const group = this.add.container(cx, top + bh / 2);
-    group.setDepth(0).setAlpha(0.5);
-
-    const frame = this.add.graphics();
-    frame.lineStyle(px(2), COLORS.maskWhite, 0.6);
-    frame.strokeRect(-bw / 2, -bh / 2, bw, bh);
-    group.add(frame);
-
-    // 점등 층: 아래(1F)→위 누적. 방금 클리어한 10층은 stagger 점등 tween.
-    const justCleared = Math.max(0, Math.floor(chaptersCleared)) * 10;
-    const prevLit = Math.max(0, lit - 10);
-    for (let f = 0; f < lit; f++) {
-      const y = bh / 2 - (f + 1) * floorH;
-      const cell = this.add.graphics();
-      cell.fillStyle(accent, 0.85);
-      cell.fillRect(-bw / 2 + px(3), y + px(1), bw - px(6), floorH - px(2));
-      group.add(cell);
-      if (f >= prevLit && f < justCleared) {
-        cell.setAlpha(0);
-        this.tweens.add({ targets: cell, alpha: 1, delay: (f - prevLit) * 150, duration: 200 });
-      }
-    }
-
-    // 줌아웃 (한 층 더 정복)
-    group.setScale(1.1);
-    this.tweens.add({ targets: group, scale: 1, duration: 1200, ease: "Quad.easeOut" });
-
-    // 부서명 (전환 화면 텍스트 허용 — ADR-0010 인게임 범위 밖)
-    const dept = DEPT_NAMES[clamped] ?? "";
-    const deptText = this.add.text(cx, top - px(10), dept, {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(13),
-      color: COLOR_HEX.limeGreen,
-    });
-    deptText.setOrigin(0.5, 1).setDepth(11);
+    this.renderRunEnd(data);
   }
 
   private renderRunEnd(data: GameOverInitData): void {
     const cx = VIEWPORT.width / 2;
 
     let title = "수고하셨습니다";
-    let subtitleText = "";
+    let subtitle = "";
     if (data.reason === "clear") {
-      title = "사직서 제출 완료";
-      subtitleText = "정시에 퇴근하셨습니다";
+      title = "50층 완주";
+      subtitle = "정시에 퇴근하셨습니다";
     } else if (data.reason === "fled_limit") {
       title = "오늘은 여기까지";
-      subtitleText = "해도 충분합니다";
-    } else if (data.reason === "early_exit") {
+      subtitle = "해도 충분합니다";
+    } else {
       title = "정시 퇴근";
-      subtitleText = "내일 또 만나요";
+      subtitle = "내일 또 만나요";
     }
 
-    const titleObj = this.add.text(cx, px(100), title, {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(26),
-      color: COLOR_HEX.neonPink,
-      fontStyle: "bold",
-    });
-    titleObj.setOrigin(0.5, 0.5);
+    this.centerText(cx, px(100), title, 26, COLOR_HEX.neonPink, true);
+    this.centerText(cx, px(140), subtitle, 14, COLOR_HEX.limeGreen, false);
 
-    const subObj = this.add.text(cx, px(140), subtitleText, {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(14),
-      color: COLOR_HEX.limeGreen,
-    });
-    subObj.setOrigin(0.5, 0.5);
+    const result = this.callEndRun(data);
 
-    // endRun 호출
-    const reason = mapReason(data.reason);
-    const result = this.callEndRun(data, reason);
-
-    // 표시
-    const scoreLine = this.add.text(cx, px(200), `SCORE: ${toScore(data.score).toString()}`, {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(18),
-      color: COLOR_HEX.maskWhite,
-    });
-    scoreLine.setOrigin(0.5, 0.5);
-
-    const coinLine = this.add.text(cx, px(230), `TOTAL COIN: ${result.totalCoin}`, {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(14),
-      color: COLOR_HEX.maskWhite,
-    });
-    coinLine.setOrigin(0.5, 0.5);
-
-    const chLine = this.add.text(cx, px(256), `CHAPTERS CLEARED: ${data.bestReachedChapter}`, {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(14),
-      color: COLOR_HEX.maskWhite,
-    });
-    chLine.setOrigin(0.5, 0.5);
-
+    this.centerText(
+      cx,
+      px(200),
+      `SCORE: ${toScore(data.score).toString()}`,
+      18,
+      COLOR_HEX.maskWhite,
+      false,
+    );
+    this.centerText(
+      cx,
+      px(230),
+      `FLOORS: ${data.floorsReached} / 50`,
+      14,
+      COLOR_HEX.maskWhite,
+      false,
+    );
     if (result.highScoreUpdated) {
-      const hsLine = this.add.text(cx, px(282), "NEW HIGH SCORE!", {
-        fontFamily: FONT_FAMILY,
-        fontSize: fontPx(14),
-        color: COLOR_HEX.comboGold,
-        fontStyle: "bold",
-      });
-      hsLine.setOrigin(0.5, 0.5);
+      this.centerText(cx, px(262), "NEW HIGH SCORE!", 14, COLOR_HEX.comboGold, true);
     }
 
-    // Leaderboard top 5
-    this.renderLeaderboard(cx, px(330));
+    this.renderLeaderboard(cx, px(310));
 
-    // 버튼 — 부모 스크린(viewport height)에 맞춤 + 명시적 self-stop
-    const btnY1 = VIEWPORT.height - px(140);
-    const btnY2 = VIEWPORT.height - px(80);
-    this.makeButton(cx, btnY1, px(220), px(56), "다시 시작", COLORS.neonPink, () => {
-      this.scene.start(SCENE_KEYS.game);
-      this.scene.stop();
-    });
-    this.makeButton(cx, btnY2, px(220), px(44), "메인 메뉴", COLORS.maskWhite, () => {
-      this.scene.start(SCENE_KEYS.mainMenu);
-      this.scene.stop();
-    });
+    this.makeButton(
+      cx,
+      VIEWPORT.height - px(140),
+      px(220),
+      px(56),
+      "다시 시작",
+      COLORS.neonPink,
+      () => {
+        this.scene.start(SCENE_KEYS.game);
+        this.scene.stop();
+      },
+    );
+    this.makeButton(
+      cx,
+      VIEWPORT.height - px(80),
+      px(220),
+      px(44),
+      "메인 메뉴",
+      COLORS.maskWhite,
+      () => {
+        this.scene.start(SCENE_KEYS.mainMenu);
+        this.scene.stop();
+      },
+    );
   }
 
-  private callEndRun(
-    data: GameOverInitData,
-    reason: EndRunReason,
-  ): {
-    readonly totalCoin: number;
-    readonly highScoreUpdated: boolean;
-  } {
+  private callEndRun(data: GameOverInitData): { readonly highScoreUpdated: boolean } {
     const container = getContainer(this);
     const runId = data.runId ?? `run-${Date.now()}`;
     try {
@@ -299,50 +122,38 @@ export class GameOverScene extends Phaser.Scene {
         { saveStore: container.ports.saveStore, clock: container.ports.clock },
         {
           runId,
-          chaptersCleared: data.bestReachedChapter,
+          chaptersCleared: data.floorsReached, // Task 5에서 floorsReached로 rename
           finalScore: toScore(data.score),
-          earnedCoin: data.earnedCoin,
-          reason,
+          earnedCoin: 0, // Task 5에서 제거
+          reason: data.reason,
         },
       );
-      return { totalCoin: result.totalCoin, highScoreUpdated: result.highScoreUpdated };
+      return { highScoreUpdated: result.highScoreUpdated };
     } catch {
-      return {
-        totalCoin: container.ports.saveStore.get<number>(STORAGE_KEYS_RUN.TOTAL_COIN) ?? 0,
-        highScoreUpdated: false,
-      };
+      return { highScoreUpdated: false };
     }
-  }
-
-  private endRunWith(data: GameOverInitData, kind: EndKind): void {
-    // 새 GameOverScene으로 전이하여 endRun 호출하는 경로.
-    // meta/streak/runId/runStartedAt 메타데이터를 모두 forward 해야 leaderboard/streak 갱신 정확.
-    this.scene.start(SCENE_KEYS.gameOver, {
-      chapter: data.chapter,
-      score: data.score,
-      earnedCoin: data.earnedCoin,
-      meta: data.meta,
-      streak: data.streak,
-      runId: data.runId,
-      runStartedAt: data.runStartedAt,
-      reason: kind,
-      bestReachedChapter: data.bestReachedChapter,
-    });
-    this.scene.stop();
   }
 
   private renderLeaderboard(cx: number, y: number): void {
     const container = getContainer(this);
     const raw = container.ports.saveStore.get<LeaderboardEntry[]>(STORAGE_KEYS_RUN.LEADERBOARD);
     const entries = Array.isArray(raw) ? raw.slice(0, 5) : [];
-    const header = this.add.text(cx, y, "TOP 5", {
-      fontFamily: FONT_FAMILY,
-      fontSize: fontPx(14),
-      color: COLOR_HEX.limeGreen,
-    });
-    header.setOrigin(0.5, 0);
+    this.centerText(cx, y, "TOP 5", 14, COLOR_HEX.limeGreen, false);
+    if (entries.length === 0) {
+      const t = this.add.text(cx, y + px(28), "(첫 기록을 만들어보세요)", {
+        fontFamily: FONT_FAMILY,
+        fontSize: fontPx(12),
+        color: COLOR_HEX.maskWhite,
+      });
+      t.setOrigin(0.5, 0).setAlpha(0.6);
+      return;
+    }
     entries.forEach((entry, i) => {
-      const text = `${i + 1}. ${Math.floor(entry.score).toString().padStart(6, "0")}  Ch.${entry.chaptersCleared}`;
+      const floors =
+        (entry as { floorsReached?: number; chaptersCleared?: number }).floorsReached ??
+        (entry as { chaptersCleared?: number }).chaptersCleared ??
+        0;
+      const text = `${i + 1}. ${Math.floor(entry.score).toString().padStart(6, "0")}  ${floors}F`;
       const t = this.add.text(cx, y + px(28) + i * px(22), text, {
         fontFamily: FONT_FAMILY,
         fontSize: fontPx(12),
@@ -350,15 +161,23 @@ export class GameOverScene extends Phaser.Scene {
       });
       t.setOrigin(0.5, 0);
     });
-    if (entries.length === 0) {
-      const t = this.add.text(cx, y + px(28), "(첫 기록을 만들어보세요)", {
-        fontFamily: FONT_FAMILY,
-        fontSize: fontPx(12),
-        color: COLOR_HEX.maskWhite,
-      });
-      t.setOrigin(0.5, 0);
-      t.setAlpha(0.6);
-    }
+  }
+
+  private centerText(
+    x: number,
+    y: number,
+    label: string,
+    size: number,
+    color: string,
+    bold: boolean,
+  ): void {
+    const t = this.add.text(x, y, label, {
+      fontFamily: FONT_FAMILY,
+      fontSize: fontPx(size),
+      color,
+      ...(bold ? { fontStyle: "bold" } : {}),
+    });
+    t.setOrigin(0.5, 0.5);
   }
 
   private makeButton(
@@ -381,21 +200,11 @@ export class GameOverScene extends Phaser.Scene {
     });
     txt.setOrigin(0.5, 0.5);
     const zone = this.add.zone(x, y, w, h);
-    // Zone은 인자 없는 setInteractive()로 자체 width/height 기반 hit area 자동 생성.
-    // InputConfig object (예: { useHandCursor: true }) 형태는 texture-bound hit area
-    // 자동 시도를 거치므로 texture 없는 Zone에서 silent fail 가능 (Phaser 3.90 명세).
     zone.setInteractive();
     if (zone.input) zone.input.cursor = "pointer";
     zone.on("pointerdown", () => {
-      const container = getContainer(this);
-      container.audioManager.play("menu_select");
+      getContainer(this).audioManager.play("menu_select");
       onClick();
     });
   }
-}
-
-function mapReason(kind: EndKind): EndRunReason {
-  if (kind === "clear") return "clear";
-  if (kind === "fled_limit") return "fled_limit";
-  return "early_exit";
 }
