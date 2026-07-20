@@ -38,8 +38,19 @@ export class PowerupPickup extends Phaser.GameObjects.Container {
       .setOrigin(0.5);
     this.add([g, label]);
 
-    this.setSize(PICKUP_RADIUS * 2, PICKUP_RADIUS * 2);
-    this.setInteractive(new Phaser.Geom.Circle(0, 0, PICKUP_RADIUS), Phaser.Geom.Circle.Contains);
+    // 원형 hit area 배치 — zombie.ts와 동일한 Phaser Container 보정 규칙 적용.
+    // Phaser InputManager.pointWithinHitArea는 TransformXY로 raw local point를 구한 뒤
+    // `x += displayOriginX; y += displayOriginY` 보정을 적용한다. Container.displayOriginX
+    // = width / 2 (custom getter) 이므로 setSize(2r, 2r) 후 visual center 클릭은 최종적으로
+    // (r, r)에 매핑된다. hit area Circle을 (0, 0)에 두면 visual top-left로 밀려나 pickup을
+    // 정확히 탭해도 거의 항상 miss한다 — Circle은 반드시 (r, r) 중심에 배치해야 한다.
+    const r = PICKUP_RADIUS;
+    this.setSize(r * 2, r * 2);
+    this.setInteractive({
+      hitArea: new Phaser.Geom.Circle(r, r, r),
+      hitAreaCallback: Phaser.Geom.Circle.Contains,
+      useHandCursor: true,
+    });
     this.setDepth(50);
     scene.add.existing(this);
     scene.tweens.add({
